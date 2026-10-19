@@ -1,0 +1,600 @@
+{
+ "name": "官渡之战（建安五年秋）",
+ "season": "秋",
+ "sides": {
+  "A": {
+   "name": "曹军",
+   "short": "曹",
+   "lord": {
+    "name": "曹操",
+    "cmd": 95,
+    "int": 95,
+    "persona": "诡诈"
+   }
+  },
+  "B": {
+   "name": "袁军",
+   "short": "袁",
+   "lord": {
+    "name": "袁绍",
+    "cmd": 80,
+    "int": 55,
+    "persona": "谨慎"
+   }
+  }
+ },
+ "map": {
+  "rivers": [
+   {
+    "d": "M0 128 C120 110 200 150 300 128 S470 108 560 132 S760 160 860 132 S960 118 1000 126",
+    "label": "大河",
+    "lx": 905,
+    "ly": 112
+   }
+  ]
+ },
+ "desc": "袁绍大军进逼官渡，两营相持；袁军粮屯乌巢，由韩猛自黎阳运粮。曹军粮少，许都远在三日之外。截粮、护粮、增援皆由军团实际接战决定。",
+ "nodes": {
+  "liyang": {
+   "name": "黎阳",
+   "x": 560,
+   "y": 70,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 0.9,
+   "owner": "B",
+   "depot": {
+    "food": 120
+   }
+  },
+  "baima": {
+   "name": "白马",
+   "x": 380,
+   "y": 175,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 0.6,
+   "owner": "A"
+  },
+  "yanjin": {
+   "name": "延津",
+   "x": 230,
+   "y": 250,
+   "type": "ford",
+   "terrain": "丘陵",
+   "owner": null
+  },
+  "yangwu": {
+   "name": "阳武·袁营",
+   "x": 520,
+   "y": 330,
+   "type": "camp",
+   "terrain": "平原",
+   "fort": 2,
+   "owner": "B"
+  },
+  "wuchao": {
+   "name": "乌巢",
+   "x": 760,
+   "y": 300,
+   "type": "depot",
+   "terrain": "平原",
+   "fort": 1,
+   "owner": "B",
+   "depot": {
+    "food": 60
+   }
+  },
+  "guandu": {
+   "name": "官渡·曹营",
+   "x": 500,
+   "y": 470,
+   "type": "camp",
+   "terrain": "平原",
+   "fort": 3,
+   "owner": "A"
+  },
+  "gushi": {
+   "name": "故市",
+   "x": 700,
+   "y": 450,
+   "type": "road",
+   "terrain": "丘陵",
+   "owner": null
+  },
+  "zhongmu": {
+   "name": "中牟",
+   "x": 330,
+   "y": 520,
+   "type": "road",
+   "terrain": "平原",
+   "owner": null
+  },
+  "xudu": {
+   "name": "许都",
+   "x": 470,
+   "y": 740,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 1,
+   "owner": "A",
+   "depot": {
+    "food": 50
+   }
+  }
+ },
+ "edges": [
+  [
+   "liyang",
+   "baima",
+   2
+  ],
+  [
+   "liyang",
+   "wuchao",
+   3
+  ],
+  [
+   "liyang",
+   "yanjin",
+   3
+  ],
+  [
+   "baima",
+   "yanjin",
+   1
+  ],
+  [
+   "baima",
+   "yangwu",
+   2
+  ],
+  [
+   "yanjin",
+   "yangwu",
+   2
+  ],
+  [
+   "yangwu",
+   "wuchao",
+   1
+  ],
+  [
+   "yangwu",
+   "guandu",
+   1
+  ],
+  [
+   "guandu",
+   "gushi",
+   1
+  ],
+  [
+   "gushi",
+   "wuchao",
+   1
+  ],
+  [
+   "guandu",
+   "zhongmu",
+   1
+  ],
+  [
+   "zhongmu",
+   "xudu",
+   2
+  ],
+  [
+   "guandu",
+   "xudu",
+   3
+  ],
+  [
+   "gushi",
+   "xudu",
+   3
+  ]
+ ],
+ "armies": [
+  {
+   "id": "C1",
+   "side": "A",
+   "name": "曹洪 · 官渡守军",
+   "gen": {
+    "name": "曹洪",
+    "cmd": 75,
+    "int": 60,
+    "persona": "谨慎",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "guandu",
+   "home": "guandu",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 6,
+    "长枪兵": 3,
+    "弓兵": 3,
+    "强弩兵": 3,
+    "器械": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "C2",
+   "side": "A",
+   "name": "曹操 · 虎豹骑",
+   "gen": {
+    "name": "曹操",
+    "cmd": 95,
+    "int": 95,
+    "persona": "诡诈",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "guandu",
+   "home": "guandu",
+   "ai": "raider",
+   "roster": {
+    "轻骑": 3,
+    "重骑": 1,
+    "刀盾兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.5
+   },
+   "food": 5
+  },
+  {
+   "id": "C3",
+   "side": "A",
+   "name": "徐晃 · 游军",
+   "gen": {
+    "name": "徐晃",
+    "cmd": 80,
+    "int": 65,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "zhongmu",
+   "home": "guandu",
+   "ai": "raider",
+   "roster": {
+    "轻骑": 1,
+    "刀盾兵": 2,
+    "长枪兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "C4",
+   "side": "A",
+   "name": "荀彧 · 许都留守",
+   "gen": {
+    "name": "荀彧",
+    "cmd": 55,
+    "int": 95,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "YUAN"
+   },
+   "at": "xudu",
+   "home": "xudu",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 2,
+    "弓兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "Y1",
+   "side": "B",
+   "name": "袁绍 · 中军",
+   "retreatHome": "liyang",
+   "gen": {
+    "name": "袁绍",
+    "cmd": 80,
+    "int": 55,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "yangwu",
+   "home": "yangwu",
+   "ai": "main",
+   "roster": {
+    "刀盾兵": 9,
+    "长枪兵": 4,
+    "弓兵": 4,
+    "强弩兵": 3,
+    "轻骑": 2,
+    "重骑": 2,
+    "器械": 2
+   },
+   "mission": {
+    "type": "attack",
+    "target": "guandu",
+    "retreatAt": 0.55
+   },
+   "food": 5
+  },
+  {
+   "id": "Y2",
+   "side": "B",
+   "name": "淳于琼 · 乌巢屯粮",
+   "gen": {
+    "name": "淳于琼",
+    "cmd": 55,
+    "int": 35,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "wuchao",
+   "home": "wuchao",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 4,
+    "长枪兵": 2,
+    "弓兵": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "Y3",
+   "side": "B",
+   "name": "张郃·高览 · 援军",
+   "gen": {
+    "name": "张郃",
+    "cmd": 82,
+    "int": 70,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "yangwu",
+   "home": "yangwu",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 3,
+    "长枪兵": 2,
+    "轻骑": 2,
+    "重骑": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "Y4",
+   "side": "B",
+   "name": "韩猛 · 运粮队",
+   "gen": {
+    "name": "韩猛",
+    "cmd": 60,
+    "int": 45,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "liyang",
+   "home": "liyang",
+   "ai": "convoy",
+   "convoyTo": "wuchao",
+   "roster": {
+    "刀盾兵": 1,
+    "轻骑": 1,
+    "辎重": 3
+   },
+   "mission": {
+    "type": "escort",
+    "target": "wuchao",
+    "retreatAt": 0.4
+   },
+   "food": 5,
+   "cargo": 30
+  }
+ ],
+ "maxDays": 60,
+ "calendar": {
+  "startDate": {
+   "year": "建安五年",
+   "month": 8,
+   "day": 20
+  },
+  "dayScale": 3
+ },
+ "dynamicSeason": false,
+ "history": {
+  "anchors": [
+   {
+    "id": "hold_A",
+    "type": "posture",
+    "side": "A",
+    "until": 15,
+    "noRaid": true,
+    "assaultMul": 0.3,
+    "text": "公与绍相拒连月，虽临阵斩将，众少粮尽，公欲还许，荀彧以为不可，乃坚壁持之"
+   },
+   {
+    "id": "hold_B",
+    "type": "posture",
+    "side": "B",
+    "until": 15,
+    "assaultMul": 0.35,
+    "text": "绍为高橹，起土山，射营中；公乃为发石车击之，绍复为地道，公亦于内为长堑以拒之"
+   },
+   {
+    "id": "wind1",
+    "type": "weather",
+    "day": 18,
+    "value": "大风",
+    "text": "是夜风起"
+   },
+   {
+    "id": "xuyou",
+    "type": "intel",
+    "side": "A",
+    "day": 15,
+    "bonus": 1.35,
+    "text": "许攸贪财，绍不能满，奔曹公，说以袭淳于琼等，辎重万余乘在乌巢，屯军无严备"
+   },
+   {
+    "id": "raid",
+    "type": "order",
+    "side": "A",
+    "day": 16,
+    "army": "C2",
+    "mission": "raid",
+    "target": "wuchao",
+    "retreatAt": 0.35,
+    "holdOthers": {
+     "C3": "guandu"
+    },
+    "lock": 4,
+    "text": "曹公乃留曹洪守营，自将步骑五千，夜从间道出，人抱束薪"
+   },
+   {
+    "id": "zhanghe",
+    "type": "decision",
+    "side": "B",
+    "node": "wuchao",
+    "choose": "counter",
+    "text": "绍闻操击琼，谓长子谭曰：就彼攻琼，吾攻拔其营，彼固无所归矣！乃使张郃、高览攻曹洪"
+   },
+   {
+    "id": "luck",
+    "type": "luck",
+    "side": "A",
+    "node": "wuchao",
+    "value": 1.35,
+    "text": "操急击之，琼等败，斩之，尽燔其粮谷"
+   },
+   {
+    "id": "hongHold",
+    "type": "luck",
+    "side": "A",
+    "node": "guandu",
+    "day": 16,
+    "value": 1.4,
+    "text": "曹洪等坚守，郃等攻之不能下"
+   },
+   {
+    "id": "defect",
+    "type": "defect",
+    "army": "Y3",
+    "to": "A",
+    "joinAt": "guandu",
+    "trigger": "depotLost:wuchao:0.6",
+    "text": "郃等闻琼破，遂来降"
+   },
+   {
+    "id": "collapse",
+    "type": "morale",
+    "side": "B",
+    "trigger": "depotLost:wuchao:0.6",
+    "org": 0.15,
+    "desert": 0.04,
+    "text": "绍众大溃"
+   },
+   {
+    "id": "flee",
+    "type": "order",
+    "side": "B",
+    "army": "Y1",
+    "mission": "retreat",
+    "target": "liyang",
+    "trigger": "depotLost:wuchao:0.6",
+    "text": "绍及谭单骑退渡河"
+   }
+  ],
+  "outcomes": [
+   {
+    "text": "乌巢粮谷被焚",
+    "check": {
+     "type": "depotBelow",
+     "node": "wuchao",
+     "frac": 0.3
+    }
+   },
+   {
+    "text": "张郃、高览降曹",
+    "check": {
+     "type": "defected",
+     "army": "Y3"
+    }
+   },
+   {
+    "text": "官渡曹营未失",
+    "check": {
+     "type": "nodeOwner",
+     "node": "guandu",
+     "owner": "A"
+    }
+   },
+   {
+    "text": "袁绍败归黎阳（曹军胜）",
+    "check": {
+     "type": "winner",
+     "side": "A"
+    }
+   }
+  ]
+ },
+ "victory": [
+  {
+   "side": "A",
+   "type": "armyAt",
+   "army": "Y1",
+   "node": "liyang",
+   "text": "袁绍中军退回黎阳"
+  },
+  {
+   "side": "A",
+   "type": "armyGone",
+   "army": "Y1",
+   "text": "袁绍中军溃散"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "guandu",
+   "owner": "B",
+   "text": "官渡曹营被攻破"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "xudu",
+   "owner": "B",
+   "text": "许都失守"
+  },
+  {
+   "side": "B",
+   "type": "armyGone",
+   "army": "C1",
+   "text": "官渡守军覆没"
+  }
+ ]
+}

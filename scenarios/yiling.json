@@ -1,0 +1,697 @@
+{
+ "name": "夷陵之战（章武二年）",
+ "season": "春",
+ "sides": {
+  "A": {
+   "name": "吴军",
+   "short": "吴",
+   "lord": {
+    "name": "陆逊",
+    "cmd": 88,
+    "int": 96,
+    "persona": "谨慎"
+   }
+  },
+  "B": {
+   "name": "蜀汉军",
+   "short": "蜀",
+   "lord": {
+    "name": "刘备",
+    "cmd": 85,
+    "int": 70,
+    "persona": "进取"
+   }
+  }
+ },
+ "calendar": {
+  "startDate": {
+   "year": "章武二年",
+   "month": 2,
+   "day": 1
+  },
+  "dayScale": 4
+ },
+ "map": {
+  "rivers": [
+   {
+    "d": "M0 318 C70 300 130 262 220 238 S380 262 470 236 S620 212 720 236 S860 300 1000 352",
+    "label": "长江",
+    "lx": 470,
+    "ly": 222
+   }
+  ]
+ },
+ "desc": "先主自秭归率诸将进军，缘山截岭，于猇亭驻营，自佷山通武陵，连营数十屯，依林木为屯。陆逊据夷陵坚守不战，以待其弊；孙桓被围于夷道。蜀军粮道自秭归逾山而来，远而险。火攻视天时、林木与主将智略而定，可沿相连的营寨蔓延。",
+ "nodes": {
+  "yufu": {
+   "name": "白帝城",
+   "x": 60,
+   "y": 330,
+   "type": "city",
+   "terrain": "丘陵",
+   "wall": 1,
+   "owner": "B",
+   "depot": {
+    "food": 60
+   }
+  },
+  "wuxian": {
+   "name": "巫县",
+   "x": 200,
+   "y": 300,
+   "type": "city",
+   "terrain": "隘口",
+   "wall": 0.5,
+   "owner": "B"
+  },
+  "zigui": {
+   "name": "秭归",
+   "x": 360,
+   "y": 310,
+   "type": "city",
+   "terrain": "丘陵",
+   "wall": 0.6,
+   "owner": "B",
+   "depot": {
+    "food": 110
+   }
+  },
+  "jiangbei": {
+   "name": "江北营",
+   "x": 640,
+   "y": 140,
+   "type": "camp",
+   "terrain": "丘陵",
+   "fort": 1,
+   "owner": "B"
+  },
+  "maanshan": {
+   "name": "马鞍山",
+   "x": 540,
+   "y": 400,
+   "type": "camp",
+   "terrain": "丘陵",
+   "cover": "林",
+   "fort": 1,
+   "owner": "B"
+  },
+  "xiaoting": {
+   "name": "猇亭·蜀营",
+   "x": 680,
+   "y": 330,
+   "type": "camp",
+   "terrain": "丘陵",
+   "cover": "林",
+   "fort": 1,
+   "owner": "B",
+   "depot": {
+    "food": 20
+   }
+  },
+  "hengshan": {
+   "name": "佷山",
+   "x": 620,
+   "y": 520,
+   "type": "camp",
+   "terrain": "丘陵",
+   "cover": "林",
+   "fort": 1,
+   "owner": "B"
+  },
+  "yiling": {
+   "name": "夷陵·吴营",
+   "x": 840,
+   "y": 270,
+   "type": "camp",
+   "terrain": "丘陵",
+   "fort": 3,
+   "owner": "A",
+   "depot": {
+    "food": 30
+   }
+  },
+  "yidao": {
+   "name": "夷道",
+   "x": 820,
+   "y": 500,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 0.7,
+   "owner": "A",
+   "depot": {
+    "food": 12
+   }
+  },
+  "jiangling": {
+   "name": "江陵",
+   "x": 960,
+   "y": 420,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 1,
+   "owner": "A",
+   "depot": {
+    "food": 120
+   }
+  }
+ },
+ "edges": [
+  [
+   "yufu",
+   "wuxian",
+   2
+  ],
+  [
+   "wuxian",
+   "zigui",
+   2
+  ],
+  [
+   "zigui",
+   "maanshan",
+   2
+  ],
+  [
+   "maanshan",
+   "xiaoting",
+   1
+  ],
+  [
+   "maanshan",
+   "hengshan",
+   1
+  ],
+  [
+   "xiaoting",
+   "hengshan",
+   1
+  ],
+  [
+   "xiaoting",
+   "yiling",
+   1
+  ],
+  [
+   "hengshan",
+   "yidao",
+   1
+  ],
+  [
+   "xiaoting",
+   "yidao",
+   2
+  ],
+  [
+   "yiling",
+   "jiangling",
+   2
+  ],
+  [
+   "yidao",
+   "jiangling",
+   2
+  ],
+  [
+   "jiangbei",
+   "xiaoting",
+   2
+  ],
+  [
+   "jiangbei",
+   "yiling",
+   2
+  ],
+  [
+   "zigui",
+   "jiangbei",
+   3
+  ]
+ ],
+ "armies": [
+  {
+   "id": "W1",
+   "side": "A",
+   "name": "陆逊 · 中军",
+   "gen": {
+    "name": "陆逊",
+    "cmd": 88,
+    "int": 96,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "yiling",
+   "home": "yiling",
+   "ai": "main",
+   "roster": {
+    "刀盾兵": 5,
+    "长枪兵": 3,
+    "弓兵": 3,
+    "强弩兵": 2,
+    "轻骑": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.5
+   },
+   "food": 5
+  },
+  {
+   "id": "W2",
+   "side": "A",
+   "name": "朱然 · 前部",
+   "gen": {
+    "name": "朱然",
+    "cmd": 80,
+    "int": 72,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "yiling",
+   "home": "yiling",
+   "ai": "raider",
+   "roster": {
+    "刀盾兵": 3,
+    "弓兵": 2,
+    "轻骑": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "W3",
+   "side": "A",
+   "name": "韩当·潘璋 · 偏师",
+   "gen": {
+    "name": "韩当",
+    "cmd": 78,
+    "int": 60,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "yiling",
+   "home": "yiling",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 3,
+    "长枪兵": 2,
+    "弓兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "W4",
+   "side": "A",
+   "name": "孙桓 · 夷道守军",
+   "gen": {
+    "name": "孙桓",
+    "cmd": 72,
+    "int": 65,
+    "persona": "谨慎",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "yidao",
+   "home": "yidao",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 3,
+    "弓兵": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 3
+  },
+  {
+   "id": "W5",
+   "side": "A",
+   "name": "江陵 · 留守",
+   "gen": {
+    "name": "留守",
+    "cmd": 60,
+    "int": 55,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "YUAN"
+   },
+   "at": "jiangling",
+   "home": "jiangling",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 2,
+    "弓兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "S1",
+   "side": "B",
+   "name": "刘备 · 中军",
+   "retreatHome": "yufu",
+   "gen": {
+    "name": "刘备",
+    "cmd": 85,
+    "int": 70,
+    "persona": "进取",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "xiaoting",
+   "home": "xiaoting",
+   "ai": "main",
+   "planTarget": "yiling",
+   "roster": {
+    "刀盾兵": 6,
+    "长枪兵": 4,
+    "弓兵": 3,
+    "强弩兵": 2,
+    "轻骑": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.55
+   },
+   "food": 5
+  },
+  {
+   "id": "S2",
+   "side": "B",
+   "name": "冯习·张南 · 前部",
+   "gen": {
+    "name": "冯习",
+    "cmd": 72,
+    "int": 55,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "hengshan",
+   "home": "hengshan",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 4,
+    "长枪兵": 2,
+    "弓兵": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "S3",
+   "side": "B",
+   "name": "吴班 · 围夷道",
+   "gen": {
+    "name": "吴班",
+    "cmd": 74,
+    "int": 58,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "hengshan",
+   "home": "hengshan",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 3,
+    "长枪兵": 2,
+    "弓兵": 2,
+    "器械": 1
+   },
+   "mission": {
+    "type": "attack",
+    "target": "yidao",
+    "retreatAt": 0.5
+   },
+   "food": 5
+  },
+  {
+   "id": "S4",
+   "side": "B",
+   "name": "沙摩柯 · 五溪蛮",
+   "gen": {
+    "name": "沙摩柯",
+    "cmd": 70,
+    "int": 30,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "maanshan",
+   "home": "maanshan",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 3,
+    "长枪兵": 1,
+    "轻骑": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.4
+   },
+   "food": 5
+  },
+  {
+   "id": "S5",
+   "side": "B",
+   "name": "黄权 · 江北军",
+   "gen": {
+    "name": "黄权",
+    "cmd": 78,
+    "int": 82,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "jiangbei",
+   "home": "jiangbei",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 3,
+    "弓兵": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.3
+   },
+   "food": 5
+  },
+  {
+   "id": "S6",
+   "side": "B",
+   "name": "运粮队",
+   "gen": {
+    "name": "运粮",
+    "cmd": 55,
+    "int": 45,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "zigui",
+   "home": "zigui",
+   "ai": "convoy",
+   "convoyTo": "xiaoting",
+   "roster": {
+    "刀盾兵": 1,
+    "辎重": 3
+   },
+   "mission": {
+    "type": "escort",
+    "target": "xiaoting",
+    "retreatAt": 0.4
+   },
+   "food": 5,
+   "cargo": 25
+  }
+ ],
+ "maxDays": 45,
+ "history": {
+  "anchors": [
+   {
+    "id": "wu_hold",
+    "type": "posture",
+    "side": "A",
+    "until": 28,
+    "noRaid": true,
+    "assaultMul": 0.05,
+    "text": "诸将并欲迎击，逊以为不可，曰：备举军东下，锐气始盛，且乘高守险，难可卒攻"
+   },
+   {
+    "id": "shu_bait",
+    "type": "posture",
+    "side": "B",
+    "until": 24,
+    "assaultMul": 0.35,
+    "text": "备遣吴班将数千人于平地立营，欲以挑战，逊不许；备知其计不可，乃引伏兵八千从谷中出"
+   },
+   {
+    "id": "heat",
+    "type": "weather",
+    "day": 28,
+    "value": "酷暑",
+    "text": "时天盛暑，蜀军舍船就步，处处结营，依林木为屯"
+   },
+   {
+    "id": "heat2",
+    "type": "weather",
+    "day": 29,
+    "value": "酷暑",
+    "text": "暑气郁蒸，林木枯燥"
+   },
+   {
+    "id": "fire1",
+    "type": "order",
+    "side": "A",
+    "day": 29,
+    "army": "W2",
+    "mission": "fire",
+    "target": "xiaoting",
+    "retreatAt": 0.4,
+    "holdOthers": {
+     "W1": "yiling"
+    },
+    "lock": 2,
+    "text": "逊乃敕各持一把茅，以火攻拔之"
+   },
+   {
+    "id": "fire2",
+    "type": "order",
+    "side": "A",
+    "day": 29,
+    "army": "W3",
+    "mission": "fire",
+    "target": "hengshan",
+    "retreatAt": 0.4,
+    "text": "一尔势成，通率诸军同时俱攻"
+   },
+   {
+    "id": "luck",
+    "type": "luck",
+    "side": "A",
+    "node": "xiaoting",
+    "day": 29,
+    "value": 1.4,
+    "text": "斩张南、冯习及胡王沙摩柯等首，破其四十余营"
+   },
+   {
+    "id": "flee",
+    "type": "order",
+    "side": "B",
+    "army": "S1",
+    "mission": "retreat",
+    "target": "yufu",
+    "trigger": "fire:xiaoting",
+    "text": "备升马鞍山，陈兵自绕，土崩瓦解；备因夜遁，驿人自担烧铙铠断后，仅得入白帝城"
+   },
+   {
+    "id": "huang",
+    "type": "defect",
+    "army": "S5",
+    "to": "none",
+    "trigger": "fire:xiaoting",
+    "text": "黄权在江北，道隔绝不得还，故率将所领降于魏"
+   },
+   {
+    "id": "loss",
+    "type": "morale",
+    "side": "B",
+    "trigger": "fire:xiaoting",
+    "org": 0.15,
+    "desert": 0.05,
+    "text": "其舟船器械，水步军资，一时略尽，尸骸漂流，塞江而下"
+   }
+  ],
+  "outcomes": [
+   {
+    "text": "火烧猇亭连营",
+    "check": {
+     "type": "fired",
+     "node": "xiaoting",
+     "by": "A"
+    }
+   },
+   {
+    "text": "黄权降魏",
+    "check": {
+     "type": "defected",
+     "army": "S5"
+    }
+   },
+   {
+    "text": "夷陵吴营未失",
+    "check": {
+     "type": "nodeOwner",
+     "node": "yiling",
+     "owner": "A"
+    }
+   },
+   {
+    "text": "刘备退还白帝（吴军胜）",
+    "check": {
+     "type": "winner",
+     "side": "A"
+    }
+   }
+  ]
+ },
+ "victory": [
+  {
+   "side": "A",
+   "type": "armyAt",
+   "army": "S1",
+   "node": "yufu",
+   "text": "刘备退还白帝城"
+  },
+  {
+   "side": "A",
+   "type": "armyGone",
+   "army": "S1",
+   "text": "刘备中军溃散"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "yiling",
+   "owner": "B",
+   "text": "攻破夷陵吴营"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "yidao",
+   "owner": "B",
+   "text": "攻克夷道，孙桓被擒"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "jiangling",
+   "owner": "B",
+   "text": "江陵失守"
+  },
+  {
+   "side": "B",
+   "type": "armyGone",
+   "army": "W1",
+   "text": "陆逊中军覆没"
+  }
+ ]
+}

@@ -1,0 +1,80 @@
+<!-- 控件样板：与正式页面共用 styles.css。新增控件先加在这里，再写进 docs/UI-GUIDE.md -->
+<header class="top">
+  <h1>控件样板</h1>
+  <nav class="modes" role="tablist"><button role="tab" aria-selected="true">游玩</button><button role="tab" aria-selected="false">编辑器</button></nav>
+  <nav class="tabs" role="tablist"><button role="tab" aria-selected="true">战役</button><button role="tab" aria-selected="false">战斗</button></nav>
+  <span class="ver">UI-KIT · 见 docs/UI-GUIDE.md</span>
+</header>
+
+<div class="lobby">
+  <div style="display:grid;gap:12px;min-width:0">
+    <section class="card">
+      <h2>按钮 <span class="lbl">BUTTON</span></h2>
+      <div class="body">
+        <div class="toolbar"><button class="btn primary">出阵</button><button class="btn">普通按钮</button><button class="btn sm">小按钮</button><button class="btn" disabled>禁用</button><button class="linkbtn">在编辑器中调整 →</button></div>
+        <div class="note">一个区域最多一个主按钮（墨底反白）。跳转到别的页面用文字链接。</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>选择 <span class="lbl">SEG · SELECT · SLIDER · STEP · CHECK</span></h2>
+      <div class="body">
+        <div><div class="lbl">分段选择 .seg</div><div class="seg"><button type="button" aria-pressed="true">平原</button><button type="button" aria-pressed="false">丘陵</button><button type="button" aria-pressed="false">隘口</button></div></div>
+        <div class="form-row"><span class="lbl">下拉 .form-row</span><select><option>晴</option><option>雨</option></select></div>
+        <div class="slider-row"><span class="lbl">滑杆</span><input type="range" min="0" max="100" value="70"><output>70</output></div>
+        <div class="roster"><span class="nm"><span class="mini" style="--side:var(--a)">刀</span>刀盾兵</span><span class="meta">0.8万</span><span class="step"><button type="button">−</button><input value="8"><button type="button">+</button></span></div>
+        <label class="chk"><input type="checkbox" checked> 勾选项 .chk</label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>可点选列表 <span class="lbl">button.pick</span></h2>
+      <div class="body">
+        <div class="pick-list">
+          <button class="pick on"><span class="nm">官渡之战</span><span class="st">建安五年秋 · 选中 .on</span></button>
+          <button class="pick"><span class="nm">夷陵之战</span><span class="st">章武二年 · 普通</span></button>
+          <button class="pick" aria-disabled="true"><span class="nm">不可用</span><span class="st">aria-disabled</span></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>信息展示 <span class="lbl">KV · METER · FLAGS · PILLS</span></h2>
+      <div class="body">
+        <dl class="kv"><dt>阵亡 / 逃散</dt><dd>1200 / 340</dd><dt>战力</dt><dd>14,200</dd></dl>
+        <div class="meter" style="--side:var(--a)"><i style="width:64%"></i></div>
+        <div class="mbar"><i style="width:40%"></i></div>
+        <div class="flags"><span class="good">敌阵动摇</span><span class="bad">侧翼受威胁</span><span>久峙不决</span></div>
+        <div class="toolbar"><span class="stage-pill">野战</span><span class="day-pill">第1日</span><span class="phase-pill" data-p="2">白刃</span><span class="histbadge">史 · 倾向 70%</span></div>
+        <div class="kbd-hint"><kbd>空格</kbd> 下一回合 · <kbd>P</kbd> 自动</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>表格与日志 <span class="lbl">table.edit · .log</span></h2>
+      <div class="body">
+        <div class="tbl-wrap"><table class="edit"><thead><tr><th>兵种</th><th>远程</th><th>冲击</th></tr></thead><tbody><tr><td>弓兵</td><td><input type="number" value="6"></td><td><input type="number" value="0"></td></tr></tbody></table></div>
+        <div class="log"><table><tbody><tr><td>03</td><td><span class="tA">甲军</span>弓兵齐射，<span class="hl">乙军左翼动摇</span></td></tr><tr><td>02</td><td>两军接近</td></tr></tbody></table></div>
+      </div>
+    </section>
+  </div>
+
+  <div style="display:grid;gap:12px;min-width:0">
+    <section class="card side-card a"><h2><span><span class="chip">A</span> 甲军</span><span class="lbl">阵营卡 .side-card.a</span></h2><div class="body"><dl class="brief-row"><dt>统帅 / 智略</dt><dd>80 / 70</dd></dl></div></section>
+    <section class="card side-card b"><h2><span><span class="chip">B</span> 乙军</span><span class="lbl">.side-card.b</span></h2><div class="body"><div class="note">说明文字 .note</div></div></section>
+    <section class="card">
+      <h2>对阵 <span class="lbl">.vs</span></h2>
+      <div class="body"><div class="vs"><div class="vs-side a"><b>曹军</b><span class="note">曹操 · 统 95 / 智 95</span></div><span class="vs-x">對</span><div class="vs-side b"><b>袁军</b><span class="note">袁绍 · 统 80 / 智 55</span></div></div></div>
+    </section>
+    <section class="card">
+      <h2>军令列表 <span class="lbl">.cmd-list</span></h2>
+      <div class="body"><div class="cmd-list">
+        <div class="lbl">进攻</div>
+        <button class="pick on"><span class="cd">B01</span><span class="nm">正面强攻</span><span class="mono">0.82</span></button>
+        <button class="pick"><span class="cd">C01</span><span class="nm">坚守</span><span class="mono">0.40</span></button>
+        <button class="pick" aria-disabled="true" title="智略不足 80"><span class="cd">S02</span><span class="nm">诈败诱敌</span><span class="note">智略不足</span></button>
+      </div></div>
+    </section>
+    <div class="ed-err">错误提示 .ed-err：需修正后才能开始</div>
+  </div>
+</div>

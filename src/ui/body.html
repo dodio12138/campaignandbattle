@@ -1,0 +1,167 @@
+<header class="top">
+  <h1>汉末会战沙盘</h1>
+  <nav class="modes" role="tablist" aria-label="模式">
+    <button role="tab" aria-selected="true" data-mode="play">游玩</button>
+    <button role="tab" aria-selected="false" data-mode="edit">编辑器</button>
+  </nav>
+  <nav class="tabs" role="tablist" aria-label="页面">
+    <button role="tab" aria-selected="true" data-mode="play" data-view="v-camp" id="tab-camp">战役</button>
+    <button role="tab" aria-selected="false" data-mode="play" data-view="v-board" id="tab-board">战斗</button>
+    <button role="tab" aria-selected="false" data-mode="edit" data-view="v-campedit" id="tab-campedit" hidden>战役编辑</button>
+    <button role="tab" aria-selected="false" data-mode="edit" data-view="v-setup" id="tab-setup" hidden>战斗编辑</button>
+    <button role="tab" aria-selected="false" data-mode="edit" data-view="v-tactics" id="tab-tactics" hidden>战术</button>
+    <button role="tab" aria-selected="false" data-mode="edit" data-view="v-rules" id="tab-rules" hidden>规则</button>
+    <button role="tab" aria-selected="false" data-mode="edit" data-view="v-batch" id="tab-batch" hidden>批量推演</button>
+  </nav>
+  <div class="sub" id="top-sub">选剧本开战役，或选战例打一场会战</div>
+  <span class="ver">v18 · 游玩 / 编辑器</span>
+</header>
+
+<div class="layout">
+  <!-- 战场概况 -->
+  <aside id="brief" style="display:grid;gap:12px;min-width:0;align-content:start"></aside>
+
+  <!-- 中央 -->
+  <main style="min-width:0">
+    <div class="view" id="v-board">
+      <div class="board-wrap">
+        <div class="controls">
+          <button class="btn" id="b-back" title="返回选战例">← 战例</button>
+          <button class="btn" id="b-side" title="收起或展开左侧军令栏" aria-pressed="false">⟨ 军令</button>
+          <button class="btn primary" id="b-play">自动推演</button>
+          <button class="btn" id="b-step">下一回合</button>
+          <button class="btn" id="b-end">直至结束</button>
+          <button class="btn" id="b-reset">重新布阵</button>
+          <select id="speed" class="btn" aria-label="推演速度" style="padding:4px 6px">
+            <option value="1400">慢</option><option value="800" selected>中</option><option value="380">快</option><option value="120">极快</option>
+          </select>
+          <div class="turn"><span class="stage-pill" id="stage">野战</span><span class="day-pill" id="day">第1日</span><span>回合</span><span class="rnd" id="rnd">0</span><span class="phase-pill" id="phase" data-p="0">远距</span></div>
+        </div>
+        <div class="map" id="map">
+          <div class="field" id="field">
+            <div class="rout-tray b" id="routB"></div>
+            <div class="line-row"><span class="zone-lbl">乙后阵</span><div class="zone rear" id="rearB"></div></div>
+            <div class="line-row">
+              <div class="wingbox" id="wlB" data-l="左翼"></div>
+              <div class="frontbox" id="frontB" data-l="乙 前阵"></div>
+              <div class="wingbox" id="wrB" data-l="右翼"></div>
+            </div>
+            <div class="works" id="worksB"></div>
+            <div class="gap" id="gap" data-p="0"></div>
+            <div class="works" id="worksA"></div>
+            <div class="line-row">
+              <div class="wingbox" id="wlA" data-l="左翼"></div>
+              <div class="frontbox" id="frontA" data-l="甲 前阵"></div>
+              <div class="wingbox" id="wrA" data-l="右翼"></div>
+            </div>
+            <div class="line-row"><span class="zone-lbl">甲后阵</span><div class="zone rear" id="rearA"></div></div>
+            <div class="rout-tray a" id="routA"></div>
+          </div>
+          <div id="banner" hidden></div>
+        </div>
+        <div class="kbd-hint" id="deploy-hint"></div>
+        <div class="legend">
+          <span><i style="background:#f4e9b0"></i>组织度</span>
+          <span><i style="background:#9fd6a0"></i>体力</span>
+          <span><i style="background:var(--warn)"></i>动摇（组织度&lt;50%）</span>
+          <span><b style="background:var(--warn);color:#000;padding:0 3px;font-family:var(--f-glyph)">帅</b>主将所在中军</span>
+          <span><b style="background:var(--ink);color:var(--panel);padding:0 3px">侧</b>本回合在侧击</span>
+          <span><b style="background:var(--bad);color:#fff;padding:0 3px">袭</b>突袭行军队列</span>
+          <span><i style="height:12px;width:16px;background:repeating-linear-gradient(135deg,var(--ink-2) 0 3px,transparent 3px 5px)"></i>行军中（左下为展开回合）</span>
+          <span>右上数字：现存兵员</span>
+        </div>
+        <section class="card">
+          <h2><span class="logtabs"><button type="button" data-lt="log" aria-pressed="true">战报</button><button type="button" data-lt="daily" aria-pressed="false">逐日战况</button></span><span class="lbl" id="log-hint">最新在上</span></h2>
+          <div class="log" id="log"><table><tbody></tbody></table></div>
+          <div class="log" id="daily" hidden></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="view" id="v-clobby"></div>
+    <div class="view" id="v-blobby"></div>
+    <div class="view" id="v-camp"></div>
+
+    <div class="view" id="v-setup">
+      <div class="toolbar" style="margin-bottom:10px"><span class="lbl">战斗编辑 · 当前战例的编成、地形、模式与 AI；改动即时生效于下一场</span><span class="sp"></span><button class="btn primary" id="se-try">在战场试演</button></div>
+      <div class="setup-grid">
+    <section class="card">
+      <h2>战场 <span class="lbl">BATTLEFIELD</span></h2>
+      <div class="body">
+        <div><div class="lbl">战例</div><select class="full" id="preset"></select></div>
+        <div><div class="lbl">地形</div><div class="seg" id="terrain"></div></div>
+        <div><div class="lbl">会战模式</div><div class="seg" id="mode"></div>
+          <div class="note" id="mode-note"></div></div>
+        <div id="mode-extra" style="display:grid;gap:6px"></div>
+        <div class="slider-row"><span class="lbl">会战天数</span><input type="range" id="days" min="1" max="60" step="1"><output id="days-o"></output></div>
+        <div class="form-row"><span class="lbl">天气</span><select id="weather"><option>晴</option><option>雨</option><option>大风</option><option>雾</option><option>雪</option><option>酷暑</option></select></div>
+        <label class="chk"><input type="checkbox" id="night"> 夜战（远程大减、计谋易成、易溃）</label>
+        <div class="slider-row" id="hold-row"><span class="lbl">对射回合</span><input type="range" id="hold" min="0" max="4" step="1"><output id="hold-o"></output></div>
+      </div>
+    </section>
+    <section class="card side-card a" id="side-A"></section>
+    <section class="card side-card b" id="side-B"></section>
+      </div>
+    </div>
+
+    <div class="view" id="v-campedit"><section class="card ed-card" id="camp-setup"></section></div>
+
+    <div class="view" id="v-batch">
+      <section class="card">
+        <h2>批量推演 <span class="lbl">使用「战斗编辑」中的当前编成</span></h2>
+        <div class="body">
+          <div class="controls">
+            <label class="lbl" for="bn">场数</label>
+            <select id="bn" class="btn" style="padding:4px 6px"><option>100</option><option selected>300</option><option>1000</option></select>
+            <button class="btn primary" id="b-batch">开始推演</button>
+            <div class="progress" style="flex:1;min-width:120px"><i id="bprog"></i></div>
+          </div>
+          <div id="bres"><p class="note">点击“开始推演”，按当前编成和规则连续演算多场，统计胜率、持续回合和各兵种损失。</p></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="view" id="v-tactics">
+      <section class="card">
+        <h2>战术编辑 <span style="display:flex;gap:8px;align-items:center"><label class="lbl" for="t-cw">AI 计较克制的权重</label><input type="number" id="t-cw" step="0.1" min="0" max="3" style="width:56px;font-family:var(--f-mono);border:1px solid var(--rule);background:var(--panel);text-align:right"><button class="btn" id="t-reset" style="padding:1px 8px;font-size:12px">恢复默认战术</button></span></h2>
+        <div class="body">
+          <p class="note" style="margin:0">战术执行期间，本方享有该战术的效果倍率；若敌方当时所用战术在本战术的“克制”名单内，本方攻击与致组织伤再乘以 (1+克制值)。AI 选战术时会把“我克敌 − 敌克我”乘以权重计入适用度。修改即时生效，并记在本浏览器里。</p>
+          <div class="tedit">
+            <div class="tlist" id="t-list"></div>
+            <div class="tdetail" id="t-detail"></div>
+          </div>
+          <div><div class="lbl" style="margin-bottom:4px">克制总览（行克列：行战术执行时遇列战术）</div><div class="tbl-wrap" id="t-matrix"></div></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="view" id="v-rules">
+      <section class="card">
+        <h2>兵种表 <span class="lbl">每部 1000 人</span></h2>
+        <div class="body"><div class="tbl-wrap" id="unit-table"></div>
+          <div class="note">远程 / 杀伤（打轻装）/ 破阵（打披甲）/ 阵坚（守方抵挡）/ 锐气（攻方抵挡）/ 披甲率 / 甲胄 / 破甲 / 冲击 / 宽度 / 组织度 / 装填回合 / 远距倍率 / 速度（遭遇战展开快慢）</div></div>
+      </section>
+      <section class="card" style="margin-top:12px">
+        <h2>阵型 <span class="lbl">FORMATION</span></h2>
+        <div class="body"><div class="tbl-wrap" id="form-table"></div>
+          <div class="note">正面宽度× / 两翼容量± / 攻击、抵挡、受组织伤、致组织伤、体力消耗、冲击、远程为倍率 / 护翼、调度为加值 / 克制：对方用该阵时本方攻击与致组织伤 ×(1+值)，格式如"方圆:0.1 长蛇:0.1"</div></div>
+      </section>
+      <section class="card" style="margin-top:12px">
+        <h2>状态效果 <span class="lbl">激发条件 → 对本方 / 对敌方</span></h2>
+        <div class="body"><div class="note" style="margin-bottom:6px">每种状态在条件成立时自动激发。倍率填 1 为无变化，加值填 0 为无变化。如"主将前阵督战"：受组织伤 ×0.96、稳阵 ×1.10，即主将居前激励各部、组织度更耐打。取消勾选即停用该状态。</div><div class="stgrid" id="status-table"></div></div>
+      </section>
+      <section class="card" style="margin-top:12px">
+        <h2>地形 <span class="lbl">TERRAIN</span></h2>
+        <div class="body"><div class="tbl-wrap" id="terrain-table"></div></div>
+      </section>
+      <section class="card" style="margin-top:12px">
+        <h2>结算参数 <span><button class="btn" id="b-defaults" style="padding:1px 8px;font-size:12px">恢复默认</button></span></h2>
+        <div class="body"><div class="pgrid" id="params"></div>
+          <div class="note">修改即时生效，下一场布阵起使用新数值；会记在本浏览器里。</div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- 战况 -->
+  <aside class="status" id="status"></aside>
+</div>
