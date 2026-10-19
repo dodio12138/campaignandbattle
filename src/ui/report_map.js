@@ -25,16 +25,18 @@ function snapFlags(c,s){ const N=c.nodes; return s.armies.filter(a=>!a.gone||(sn
 function campaignLegs(c){ const S=snapDays(c), legs=[];
   for(const A of c.armies){ if(A.ai==="convoy") continue; let leg=null;
     for(const s of S){ const a=s.armies.find(x=>x.id===A.id); if(!a) continue;
-      if(!leg){ leg={id:A.id,side:a.side,seq:[a.at],d0:s.day,d1:s.day}; continue; }
+      if(!leg){ leg={id:A.id,side:a.side,seq:[a.at],d0:s.day,d1:s.day,rt:0,mv:0}; continue; }
       if(a.at!==leg.seq[leg.seq.length-1]){
-        if(leg.seq.includes(a.at)){ if(leg.seq.length>1) legs.push(leg); leg={id:A.id,side:a.side,seq:[leg.seq[leg.seq.length-1],a.at],d0:s.day,d1:s.day}; }
-        else { leg.seq.push(a.at); leg.d1=s.day; } }
+        if(leg.seq.includes(a.at)){ if(leg.seq.length>1) legs.push(leg); leg={id:A.id,side:a.side,seq:[leg.seq[leg.seq.length-1],a.at],d0:s.day,d1:s.day,rt:0,mv:0}; }
+        else { leg.seq.push(a.at); leg.d1=s.day; }
+        leg.mv++; if(a.mt==="retreat") leg.rt++; }
       if(a.gone) break; }
     if(leg&&leg.seq.length>1) legs.push(leg); }
   // 同一军团来回走同一条路：只画一次，日子取并集；每支军团只在最长的一段旁标名
   const g={}; for(const L of legs){ const k=L.id+"|"+L.seq.join(">"), kr=L.id+"|"+L.seq.slice().reverse().join(">"), o=g[k]||g[kr];
     if(o&&g[k]){ o.d0=Math.min(o.d0,L.d0); o.d1=Math.max(o.d1,L.d1); } else g[k]=L; }
-  const out=Object.values(g), best={}; for(const L of out){ const n=L.seq.length; if(!best[L.id]||n>best[L.id].seq.length||(n===best[L.id].seq.length&&L.d1>best[L.id].d1)) best[L.id]=L; }
+  const out=Object.values(g), best={}; for(const L of out) L.retreat=L.rt*2>L.mv;   // 这一段多半日子奉的是撤回之令 → 撤退
+  for(const L of out){ const n=L.seq.length; if(!best[L.id]||n>best[L.id].seq.length||(n===best[L.id].seq.length&&L.d1>best[L.id].d1)) best[L.id]=L; }
   for(const L of out){ L.label=best[L.id]===L; const all=out.filter(x=>x.id===L.id); L.D0=Math.min(...all.map(x=>x.d0)); L.D1=Math.max(...all.map(x=>x.d1)); }
   return out; }
 function overviewSVG(c){
@@ -48,7 +50,7 @@ function overviewSVG(c){
   for(const L of campaignLegs(c)){ const A=armyInfo(c,L.id), k=0.45+0.55*Math.sqrt((A.men0||0)/maxMen);
     const r=arrowPath(routePts(fillSeq(L.seq,c.edges),N),{w0:2.5*k+1,w1:8*k+1.5,wh:16*k+3,hl:34*k+8,s0:16,e0:18});
     if(!r) continue; const sd=L.side.toLowerCase();
-    arrows+=`<path d="${r.d}" class="cp-march ${sd} big"><title>${esc(A.name)} 第 ${L.d0}–${L.d1} 日</title></path>`;
+    arrows+=`<path d="${r.d}" class="cp-march ${sd} big${L.retreat?" retreat":""}"><title>${esc(A.name)} 第 ${L.d0}–${L.d1} 日</title></path>`;
     if(!L.label) continue;
     const txt=`D${L.D0}${L.D1!==L.D0?"–"+L.D1:""}`, anc=L.side==="A"?"end":"start", lx=r.hb.x+(L.side==="A"?-10:10), ly=place(lx,r.hb.y-14,A.gen.name.length*13+txt.length*7+6,anc);
     labels+=`<text x="${r1(lx)}" y="${r1(ly)}" text-anchor="${anc}" class="cm-lbl ${sd}">${esc(A.gen.name)} <tspan class="d">${txt}</tspan></text>`; }
@@ -58,14 +60,15 @@ function overviewSVG(c){
   // 标题框、图例、指北
   const d0=dateText(c,1), d1=dateText(c,c.day), res=c.over?(c.over.side?c.sideName(c.over.side)+"胜 · "+c.over.text:c.over.text):`进行中 · 第 ${c.day} 日`;
   h+=`<g transform="translate(26,26)"><rect class="cm-box" width="330" height="70"/><text x="14" y="38" class="cm-title">${esc(c.name.replace(/（.*?）/,""))} · 示意图</text><text x="14" y="58" class="cm-sub">${d0?esc(d0)+" — "+esc(d1)+" · ":""}历时 ${c.day} 日 · ${esc(res)}</text></g>`;
-  h+=`<g transform="translate(26,640)"><rect class="cm-box" width="250" height="134"/>
+  h+=`<g transform="translate(26,616)"><rect class="cm-box" width="250" height="158"/>
     <path d="${arrowPath([{x:14,y:22},{x:70,y:22}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a"/><text x="80" y="26" class="cm-leg">${esc(c.sideName("A"))}进军</text>
     <path d="${arrowPath([{x:14,y:46},{x:70,y:46}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march b"/><text x="80" y="50" class="cm-leg">${esc(c.sideName("B"))}进军</text>
-    <g class="mk mk-battle" transform="translate(24,72)"><circle r="9"/><text y="4.5">⚔</text></g><text x="40" y="76" class="cm-leg">会战（D 日）</text>
-    <g class="mk mk-fire" transform="translate(140,72)"><circle r="9"/><text y="4.5">火</text></g><text x="156" y="76" class="cm-leg">焚粮 / 火攻</text>
-    <g class="mk mk-capture a" transform="translate(22,100)"><path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/><text y="-3" x="5.5">克</text></g><text x="40" y="104" class="cm-leg">攻占</text>
-    <g class="mk mk-collapse" transform="translate(140,98)"><circle r="9"/><text y="4.5">溃</text></g><text x="156" y="102" class="cm-leg">溃散</text>
-    <text x="14" y="126" class="cm-sub">兵旗为终局位置；箭头粗细示兵力</text></g>`;
+    <path d="${arrowPath([{x:14,y:70},{x:70,y:70}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a retreat"/><text x="80" y="74" class="cm-leg">撤退（空心虚线）</text>
+    <g class="mk mk-battle" transform="translate(24,96)"><circle r="9"/><text y="4.5">⚔</text></g><text x="40" y="100" class="cm-leg">会战（D 日）</text>
+    <g class="mk mk-fire" transform="translate(140,96)"><circle r="9"/><text y="4.5">火</text></g><text x="156" y="100" class="cm-leg">焚粮 / 火攻</text>
+    <g class="mk mk-capture a" transform="translate(22,124)"><path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/><text y="-3" x="5.5">克</text></g><text x="40" y="128" class="cm-leg">攻占</text>
+    <g class="mk mk-collapse" transform="translate(140,122)"><circle r="9"/><text y="4.5">溃</text></g><text x="156" y="126" class="cm-leg">溃散</text>
+    <text x="14" y="150" class="cm-sub">兵旗为终局位置；箭头粗细示兵力</text></g>`;
   h+=`<g transform="translate(950,58)"><path d="M0 -26L9 6L0 0L-9 6Z" class="cm-npath"/><text y="22" class="cm-n">北</text></g>`;
   return h+mapFrameSVG(); }
 
@@ -82,16 +85,17 @@ function dailySVG(c,i){
   let h=mapBaseSVG({sc:c.sc,nodes:N,edges:c.edges,owners:s.owners,depots:s.depots}), moves="", plans="";
   for(const a of s.armies){ if(a.gone) continue; const sd=a.side.toLowerCase();
     const mv=dayMoveSeq(c,prev&&prev.armies.find(x=>x.id===a.id),a);
-    if(mv){ const r=arrowPath(routePts(mv.seq,N,mv.f0,mv.f1),{w0:2.5,w1:6,wh:12,hl:22,s0:4,e0:2,min:14}); if(r) moves+=`<path d="${r.d}" class="cp-march ${sd} on"/>`; }
+    if(mv){ const r=arrowPath(routePts(mv.seq,N,mv.f0,mv.f1),{w0:2.5,w1:6,wh:12,hl:22,s0:4,e0:2,min:14}); if(r) moves+=`<path d="${r.d}" class="cp-march ${sd} on${a.mt==="retreat"?" retreat":""}"/>`; }
     if(a.path.length){ const seq=a.nx&&a.prog>0?[a.at,...a.path]:[a.at,...a.path]; const r=arrowPath(routePts(seq,N,a.nx&&a.prog>0?a.prog/(c.edge(a.at,a.nx)||{d:1}).d:0,1),{w0:2,w1:4.5,wh:10,hl:18,s0:6,e0:18});
       if(r) plans+=`<path d="${r.d}" class="cp-plan ${sd}"/>`; } }
   h+=marksSVG(dayMarks(c,s.day,false),N)+flagsSVG(snapFlags(c,s))+`<g class="cp-arrows">${plans}${moves}</g>`;
   const dt=dateText(c,s.day);
   h+=`<g transform="translate(26,26)"><rect class="cm-box" width="250" height="62"/><text x="14" y="34" class="cm-title" style="font-size:26px">第 ${s.day} 日</text><text x="14" y="52" class="cm-sub">${dt?esc(dt)+" · ":""}${esc(s.weather||"")}</text></g>`;
-  h+=`<g transform="translate(26,700)"><rect class="cm-box" width="300" height="74"/>
+  h+=`<g transform="translate(26,676)"><rect class="cm-box" width="300" height="98"/>
     <path d="${arrowPath([{x:14,y:20},{x:62,y:20}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a on"/><text x="72" y="24" class="cm-leg">当日行进</text>
     <path d="${arrowPath([{x:150,y:20},{x:198,y:20}],{w0:1.5,w1:3,wh:7,hl:10,s0:0,e0:0,min:5}).d}" class="cp-plan a"/><text x="208" y="24" class="cm-leg">既定去向</text>
-    <text x="14" y="46" class="cm-sub">兵旗下两条：兵员、组织；虚框为军心动摇</text><text x="14" y="64" class="cm-sub">⚔ 会战 · 火 焚粮 · 克 攻占 · 溃 溃散</text></g>`;
+    <path d="${arrowPath([{x:14,y:44},{x:62,y:44}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a on retreat"/><text x="72" y="48" class="cm-leg">当日撤退</text>
+    <text x="14" y="70" class="cm-sub">兵旗下两条：兵员、组织；虚框为军心动摇</text><text x="14" y="88" class="cm-sub">⚔ 会战 · 火 焚粮 · 克 攻占 · 溃 溃散</text></g>`;
   h+=`<g transform="translate(950,58)"><path d="M0 -26L9 6L0 0L-9 6Z" class="cm-npath"/><text y="22" class="cm-n">北</text></g>`;
   return h+mapFrameSVG(); }
 

@@ -571,6 +571,14 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
 .rmap-bar{margin:8px 0 6px;max-width:1100px} .rmap-bar #rd-lbl{min-width:7em;text-align:right}
 .rd-log{max-height:220px;max-width:1100px;border:1px solid var(--rule);margin-top:6px}
 .cmap .cp-march.big{fill-opacity:.62;stroke-width:1.4}
+/* 箭头 v2：实心为进军，空心虚线为撤退，细虚线为既定去向 */
+.cmap .cp-arrows{filter:drop-shadow(0 1px 1.2px rgba(0,0,0,.35))}
+.cmap .cp-march{fill:var(--ca);fill-opacity:.82;stroke:color-mix(in srgb,var(--ca) 65%,#000);stroke-width:.8;stroke-linejoin:miter}
+.cmap .cp-march.b{fill:var(--cb);stroke:color-mix(in srgb,var(--cb) 65%,#000)}
+.cmap .cp-march.on,.cmap .cp-march.big{fill-opacity:.92;stroke-width:1}
+.cmap .cp-march.retreat{fill:var(--panel);fill-opacity:.75;stroke:var(--ca);stroke-width:1.6;stroke-dasharray:5 3}
+.cmap .cp-march.retreat.b{stroke:var(--cb)}
+.cmap .cp-plan{fill:none;stroke-width:1.1;stroke-dasharray:2 3;opacity:.85}
 </style>
 </head>
 <body>

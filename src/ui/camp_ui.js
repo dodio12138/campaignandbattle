@@ -27,7 +27,7 @@ $("#v-camp").innerHTML=`<div class="camp-grid">
     <div class="lbl" style="margin-top:4px">军团（点选后下达目标）</div><div id="cp-armies" class="cp-armies"></div>
     <div id="cp-orders"></div></div></section>
   <section class="card cp-mapcard"><div class="cp-map" id="cp-map"><svg id="cp-svg" class="cmap" viewBox="0 0 1000 800" role="img" aria-label="战役地图"></svg></div>
-    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>箭头：进军路线</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
+    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>实心箭头：进军 · 空心虚线箭头：撤退</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
   <div class="cp-report" id="cp-report" hidden></div>
   <section class="card cp-right"><h2>情报 <span class="lbl">军报</span></h2><div class="body"><div id="cp-info"></div><div class="lbl">战役日志（最新在上）</div><div class="log cp-log" id="cp-log"></div></div></section>
 </div>`;
@@ -98,7 +98,7 @@ function renderCampMap(){
   // 进军箭头：画在最上层（玩家扮演甲方时，不显示乙方未被选中的路线）
   let arrows="";
   for(const a of c.armies){ if(a.gone||!a.path.length) continue; if(c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B") continue;
-    const d=marchArrow([a.at,...a.path],N); if(d) arrows+=`<path d="${d}" class="cp-march ${a.side.toLowerCase()} ${a.id===campSel?"on":""}"/>`; }
+    const d=marchArrow([a.at,...a.path],N); if(d) arrows+=`<path d="${d}" class="cp-march ${a.side.toLowerCase()}${a.mission.type==="retreat"?" retreat":""} ${a.id===campSel?"on":""}"/>`; }
   const flags=c.armies.filter(a=>!a.gone).map(a=>{ const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), p=armyXY(N,a.at,a.path[0],a.prog,a.path[0]?c.edge(a.at,a.path[0]).d:1);
     return {...p,side:a.side,gen:a.gen.name,name:a.name,id:a.id,n:cus.length,men,ratio:men/(a.men0||men||1),org:cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0,
       shaken:a.shaken>0,tag:MISSION_TAG[a.mission.type],cargo:a.cargo>0,on:a.id===campSel}; });

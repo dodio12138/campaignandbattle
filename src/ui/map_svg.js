@@ -16,24 +16,35 @@ function roadD(ia,a,ib,b){ return `M${a.x} ${a.y} `+roadSeg(ia,a,ib,b); }
 /* 从 a 往 b 走了 t（0–1）时所在的点 */
 function roadAt(ia,a,ib,b,t){ const c=roadCurve(ia,a,ib,b); return bezAt(c,c.fw?t:1-t); }
 
-/* ---------- 进军箭头：燕尾起笔、由细渐宽、宽箭头收尖（经典作战地图画法） ---------- */
-/* 沿据点序列取样；f0 / f1 为首段起点、末段终点在该段上的比例 */
-function routePts(seq,N,f0=0,f1=1){ const pts=[], last=seq.length-2;
-  for(let i=0;i<=last;i++){ const a=seq[i], b=seq[i+1], t0=i===0?f0:0, t1=i===last?f1:1;
-    for(let k=i===0?0:1;k<=16;k++) pts.push(roadAt(a,N[a],b,N[b],t0+(t1-t0)*k/16)); }
+/* ---------- 进军箭头：作战示意图画法——尖尾、渐粗、倒钩箭头；整条只弯一次 ---------- */
+/* 不逐段贴着道路走：取起点、终点，以及路线上离两端连线最远的一个据点，拟成一条二次曲线（至多一个弯）。
+   f0 / f1：起点、终点落在首段 / 末段道路上的比例（每日战况里走了一半的路） */
+function routePts(seq,N,f0=0,f1=1){ const n=seq.length; if(n<2) return [];
+  const p0=f0>0?roadAt(seq[0],N[seq[0]],seq[1],N[seq[1]],f0):{x:N[seq[0]].x,y:N[seq[0]].y};
+  const pn=f1<1?roadAt(seq[n-2],N[seq[n-2]],seq[n-1],N[seq[n-1]],f1):{x:N[seq[n-1]].x,y:N[seq[n-1]].y};
+  const dx=pn.x-p0.x, dy=pn.y-p0.y, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L, mx=(p0.x+pn.x)/2, my=(p0.y+pn.y)/2;
+  const off=q=>(q.x-p0.x)*nx+(q.y-p0.y)*ny;
+  let far=null, fd=0; for(let i=1;i<n-1;i++){ const q=N[seq[i]], d=off(q); if(Math.abs(d)>Math.abs(fd)){ fd=d; far=q; } }
+  let T;   // 曲线在 t=0.5 时经过的点
+  if(far&&Math.abs(fd)>L*0.12) T={x:mx+(far.x-mx)*0.75, y:my+(far.y-my)*0.75};      // 绕道：向拐点弯过去，但不贴死
+  else { const side=n===2?Math.sign(off(roadAt(seq[0],N[seq[0]],seq[1],N[seq[1]],0.5)))||1:Math.sign(fd)||1;   // 直去：顺着道路那一侧微弓
+    const bow=side*Math.min(36,L*0.09); T={x:mx+nx*bow, y:my+ny*bow}; }
+  const C={x:2*T.x-mx, y:2*T.y-my}, pts=[];
+  for(let k=0;k<=40;k++){ const t=k/40, u=1-t; pts.push({x:u*u*p0.x+2*u*t*C.x+t*t*pn.x, y:u*u*p0.y+2*u*t*C.y+t*t*pn.y}); }
   return pts; }
+/* 箭形：尾端收尖，向前渐粗（先快后缓），箭头两翼向后掠出倒钩 */
 function arrowPath(pts,o={}){
   if(pts.length<2) return "";
   const cum=[0]; for(let i=1;i<pts.length;i++) cum.push(cum[i-1]+Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y));
   const L=cum[cum.length-1]; if(L<(o.min??30)) return "";
-  const at=d=>{ let i=1; while(i<cum.length-1&&cum[i]<d) i++; const f=(d-cum[i-1])/((cum[i]-cum[i-1])||1), a=pts[i-1], b=pts[i];
+  const at=d=>{ d=Math.max(0,Math.min(L,d)); let i=1; while(i<cum.length-1&&cum[i]<d) i++; const f=(d-cum[i-1])/((cum[i]-cum[i-1])||1), a=pts[i-1], b=pts[i];
     const tx=b.x-a.x, ty=b.y-a.y, tl=Math.hypot(tx,ty)||1; return {x:a.x+tx*f, y:a.y+ty*f, tx:tx/tl, ty:ty/tl}; };
-  const s0=Math.min(o.s0??20,L*0.18), e0=Math.min(o.e0??20,L*0.15), hl=Math.min(o.hl??30,L*0.3), body=L-e0-hl;
-  const w0=o.w0??3, w1=o.w1??6.5, wh=o.wh??13, n=Math.max(4,Math.round((body-s0)/10)), Lp=[], Rp=[];
-  for(let i=0;i<=n;i++){ const d=s0+(body-s0)*i/n, p=at(d), w=w0+(w1-w0)*i/n; Lp.push([p.x-p.ty*w,p.y+p.tx*w]); Rp.push([p.x+p.ty*w,p.y-p.tx*w]); }
-  const hb=at(body), tip=at(L-e0), t0=at(s0);
-  const wingL=[hb.x-hb.ty*wh,hb.y+hb.tx*wh], wingR=[hb.x+hb.ty*wh,hb.y-hb.tx*wh], notch=[t0.x+t0.tx*Math.min(5,w0*1.6),t0.y+t0.ty*Math.min(5,w0*1.6)];
-  const all=[...Lp,wingL,[tip.x,tip.y],wingR,...Rp.reverse(),notch];
+  const s0=Math.min(o.s0??20,L*0.18), e0=Math.min(o.e0??20,L*0.15), hl=Math.min(o.hl??30,L*0.32), body=L-e0-hl;
+  const w0=(o.w0??3)*0.35, w1=o.w1??6.5, wh=o.wh??13, n=Math.max(6,Math.round((body-s0)/8)), Lp=[], Rp=[];
+  for(let i=1;i<=n;i++){ const f=i/n, d=s0+(body-s0)*f, p=at(d), w=w0+(w1-w0)*Math.sqrt(f); Lp.push([p.x-p.ty*w,p.y+p.tx*w]); Rp.push([p.x+p.ty*w,p.y-p.tx*w]); }
+  const t0=at(s0), hb=at(body), tip=at(L-e0), bk=at(body-hl*0.28);   // bk：倒钩向后掠到的位置
+  const barbL=[bk.x-bk.ty*wh,bk.y+bk.tx*wh], barbR=[bk.x+bk.ty*wh,bk.y-bk.tx*wh];
+  const all=[[t0.x,t0.y],...Lp,barbL,[tip.x,tip.y],barbR,...Rp.reverse()];
   return {d:"M"+all.map(([x,y])=>r1(x)+" "+r1(y)).join("L")+"Z", tip, hb}; }
 function marchArrow(seq,N,o){ const r=arrowPath(routePts(seq,N),o); return r?r.d:""; }
 /* 补全据点序列：相邻两点之间若无直连道路，按道路最短跳数补上中间据点 */

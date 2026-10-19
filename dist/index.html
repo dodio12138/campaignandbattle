@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- campaignandbattle v0.19.0 · 由 tools/build.js 生成，请勿直接修改，改 src/ 后重新构建 -->
+<!-- campaignandbattle v0.19.1 · 由 tools/build.js 生成，请勿直接修改，改 src/ 后重新构建 -->
 </head>
 <body>
 <title>汉末会战沙盘</title>
@@ -574,6 +574,14 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
 .rmap-bar{margin:8px 0 6px;max-width:1100px} .rmap-bar #rd-lbl{min-width:7em;text-align:right}
 .rd-log{max-height:220px;max-width:1100px;border:1px solid var(--rule);margin-top:6px}
 .cmap .cp-march.big{fill-opacity:.62;stroke-width:1.4}
+/* 箭头 v2：实心为进军，空心虚线为撤退，细虚线为既定去向 */
+.cmap .cp-arrows{filter:drop-shadow(0 1px 1.2px rgba(0,0,0,.35))}
+.cmap .cp-march{fill:var(--ca);fill-opacity:.82;stroke:color-mix(in srgb,var(--ca) 65%,#000);stroke-width:.8;stroke-linejoin:miter}
+.cmap .cp-march.b{fill:var(--cb);stroke:color-mix(in srgb,var(--cb) 65%,#000)}
+.cmap .cp-march.on,.cmap .cp-march.big{fill-opacity:.92;stroke-width:1}
+.cmap .cp-march.retreat{fill:var(--panel);fill-opacity:.75;stroke:var(--ca);stroke-width:1.6;stroke-dasharray:5 3}
+.cmap .cp-march.retreat.b{stroke:var(--cb)}
+.cmap .cp-plan{fill:none;stroke-width:1.1;stroke-dasharray:2 3;opacity:.85}
 </style>
 <header class="top">
   <h1>汉末会战沙盘</h1>
@@ -3502,24 +3510,35 @@ function roadD(ia,a,ib,b){ return `M${a.x} ${a.y} `+roadSeg(ia,a,ib,b); }
 /* 从 a 往 b 走了 t（0–1）时所在的点 */
 function roadAt(ia,a,ib,b,t){ const c=roadCurve(ia,a,ib,b); return bezAt(c,c.fw?t:1-t); }
 
-/* ---------- 进军箭头：燕尾起笔、由细渐宽、宽箭头收尖（经典作战地图画法） ---------- */
-/* 沿据点序列取样；f0 / f1 为首段起点、末段终点在该段上的比例 */
-function routePts(seq,N,f0=0,f1=1){ const pts=[], last=seq.length-2;
-  for(let i=0;i<=last;i++){ const a=seq[i], b=seq[i+1], t0=i===0?f0:0, t1=i===last?f1:1;
-    for(let k=i===0?0:1;k<=16;k++) pts.push(roadAt(a,N[a],b,N[b],t0+(t1-t0)*k/16)); }
+/* ---------- 进军箭头：作战示意图画法——尖尾、渐粗、倒钩箭头；整条只弯一次 ---------- */
+/* 不逐段贴着道路走：取起点、终点，以及路线上离两端连线最远的一个据点，拟成一条二次曲线（至多一个弯）。
+   f0 / f1：起点、终点落在首段 / 末段道路上的比例（每日战况里走了一半的路） */
+function routePts(seq,N,f0=0,f1=1){ const n=seq.length; if(n<2) return [];
+  const p0=f0>0?roadAt(seq[0],N[seq[0]],seq[1],N[seq[1]],f0):{x:N[seq[0]].x,y:N[seq[0]].y};
+  const pn=f1<1?roadAt(seq[n-2],N[seq[n-2]],seq[n-1],N[seq[n-1]],f1):{x:N[seq[n-1]].x,y:N[seq[n-1]].y};
+  const dx=pn.x-p0.x, dy=pn.y-p0.y, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L, mx=(p0.x+pn.x)/2, my=(p0.y+pn.y)/2;
+  const off=q=>(q.x-p0.x)*nx+(q.y-p0.y)*ny;
+  let far=null, fd=0; for(let i=1;i<n-1;i++){ const q=N[seq[i]], d=off(q); if(Math.abs(d)>Math.abs(fd)){ fd=d; far=q; } }
+  let T;   // 曲线在 t=0.5 时经过的点
+  if(far&&Math.abs(fd)>L*0.12) T={x:mx+(far.x-mx)*0.75, y:my+(far.y-my)*0.75};      // 绕道：向拐点弯过去，但不贴死
+  else { const side=n===2?Math.sign(off(roadAt(seq[0],N[seq[0]],seq[1],N[seq[1]],0.5)))||1:Math.sign(fd)||1;   // 直去：顺着道路那一侧微弓
+    const bow=side*Math.min(36,L*0.09); T={x:mx+nx*bow, y:my+ny*bow}; }
+  const C={x:2*T.x-mx, y:2*T.y-my}, pts=[];
+  for(let k=0;k<=40;k++){ const t=k/40, u=1-t; pts.push({x:u*u*p0.x+2*u*t*C.x+t*t*pn.x, y:u*u*p0.y+2*u*t*C.y+t*t*pn.y}); }
   return pts; }
+/* 箭形：尾端收尖，向前渐粗（先快后缓），箭头两翼向后掠出倒钩 */
 function arrowPath(pts,o={}){
   if(pts.length<2) return "";
   const cum=[0]; for(let i=1;i<pts.length;i++) cum.push(cum[i-1]+Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y));
   const L=cum[cum.length-1]; if(L<(o.min??30)) return "";
-  const at=d=>{ let i=1; while(i<cum.length-1&&cum[i]<d) i++; const f=(d-cum[i-1])/((cum[i]-cum[i-1])||1), a=pts[i-1], b=pts[i];
+  const at=d=>{ d=Math.max(0,Math.min(L,d)); let i=1; while(i<cum.length-1&&cum[i]<d) i++; const f=(d-cum[i-1])/((cum[i]-cum[i-1])||1), a=pts[i-1], b=pts[i];
     const tx=b.x-a.x, ty=b.y-a.y, tl=Math.hypot(tx,ty)||1; return {x:a.x+tx*f, y:a.y+ty*f, tx:tx/tl, ty:ty/tl}; };
-  const s0=Math.min(o.s0??20,L*0.18), e0=Math.min(o.e0??20,L*0.15), hl=Math.min(o.hl??30,L*0.3), body=L-e0-hl;
-  const w0=o.w0??3, w1=o.w1??6.5, wh=o.wh??13, n=Math.max(4,Math.round((body-s0)/10)), Lp=[], Rp=[];
-  for(let i=0;i<=n;i++){ const d=s0+(body-s0)*i/n, p=at(d), w=w0+(w1-w0)*i/n; Lp.push([p.x-p.ty*w,p.y+p.tx*w]); Rp.push([p.x+p.ty*w,p.y-p.tx*w]); }
-  const hb=at(body), tip=at(L-e0), t0=at(s0);
-  const wingL=[hb.x-hb.ty*wh,hb.y+hb.tx*wh], wingR=[hb.x+hb.ty*wh,hb.y-hb.tx*wh], notch=[t0.x+t0.tx*Math.min(5,w0*1.6),t0.y+t0.ty*Math.min(5,w0*1.6)];
-  const all=[...Lp,wingL,[tip.x,tip.y],wingR,...Rp.reverse(),notch];
+  const s0=Math.min(o.s0??20,L*0.18), e0=Math.min(o.e0??20,L*0.15), hl=Math.min(o.hl??30,L*0.32), body=L-e0-hl;
+  const w0=(o.w0??3)*0.35, w1=o.w1??6.5, wh=o.wh??13, n=Math.max(6,Math.round((body-s0)/8)), Lp=[], Rp=[];
+  for(let i=1;i<=n;i++){ const f=i/n, d=s0+(body-s0)*f, p=at(d), w=w0+(w1-w0)*Math.sqrt(f); Lp.push([p.x-p.ty*w,p.y+p.tx*w]); Rp.push([p.x+p.ty*w,p.y-p.tx*w]); }
+  const t0=at(s0), hb=at(body), tip=at(L-e0), bk=at(body-hl*0.28);   // bk：倒钩向后掠到的位置
+  const barbL=[bk.x-bk.ty*wh,bk.y+bk.tx*wh], barbR=[bk.x+bk.ty*wh,bk.y-bk.tx*wh];
+  const all=[[t0.x,t0.y],...Lp,barbL,[tip.x,tip.y],barbR,...Rp.reverse()];
   return {d:"M"+all.map(([x,y])=>r1(x)+" "+r1(y)).join("L")+"Z", tip, hb}; }
 function marchArrow(seq,N,o){ const r=arrowPath(routePts(seq,N),o); return r?r.d:""; }
 /* 补全据点序列：相邻两点之间若无直连道路，按道路最短跳数补上中间据点 */
@@ -3617,7 +3636,7 @@ $("#v-camp").innerHTML=`<div class="camp-grid">
     <div class="lbl" style="margin-top:4px">军团（点选后下达目标）</div><div id="cp-armies" class="cp-armies"></div>
     <div id="cp-orders"></div></div></section>
   <section class="card cp-mapcard"><div class="cp-map" id="cp-map"><svg id="cp-svg" class="cmap" viewBox="0 0 1000 800" role="img" aria-label="战役地图"></svg></div>
-    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>箭头：进军路线</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
+    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>实心箭头：进军 · 空心虚线箭头：撤退</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
   <div class="cp-report" id="cp-report" hidden></div>
   <section class="card cp-right"><h2>情报 <span class="lbl">军报</span></h2><div class="body"><div id="cp-info"></div><div class="lbl">战役日志（最新在上）</div><div class="log cp-log" id="cp-log"></div></div></section>
 </div>`;
@@ -3688,7 +3707,7 @@ function renderCampMap(){
   // 进军箭头：画在最上层（玩家扮演甲方时，不显示乙方未被选中的路线）
   let arrows="";
   for(const a of c.armies){ if(a.gone||!a.path.length) continue; if(c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B") continue;
-    const d=marchArrow([a.at,...a.path],N); if(d) arrows+=`<path d="${d}" class="cp-march ${a.side.toLowerCase()} ${a.id===campSel?"on":""}"/>`; }
+    const d=marchArrow([a.at,...a.path],N); if(d) arrows+=`<path d="${d}" class="cp-march ${a.side.toLowerCase()}${a.mission.type==="retreat"?" retreat":""} ${a.id===campSel?"on":""}"/>`; }
   const flags=c.armies.filter(a=>!a.gone).map(a=>{ const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), p=armyXY(N,a.at,a.path[0],a.prog,a.path[0]?c.edge(a.at,a.path[0]).d:1);
     return {...p,side:a.side,gen:a.gen.name,name:a.name,id:a.id,n:cus.length,men,ratio:men/(a.men0||men||1),org:cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0,
       shaken:a.shaken>0,tag:MISSION_TAG[a.mission.type],cargo:a.cargo>0,on:a.id===campSel}; });
@@ -4110,16 +4129,18 @@ function snapFlags(c,s){ const N=c.nodes; return s.armies.filter(a=>!a.gone||(sn
 function campaignLegs(c){ const S=snapDays(c), legs=[];
   for(const A of c.armies){ if(A.ai==="convoy") continue; let leg=null;
     for(const s of S){ const a=s.armies.find(x=>x.id===A.id); if(!a) continue;
-      if(!leg){ leg={id:A.id,side:a.side,seq:[a.at],d0:s.day,d1:s.day}; continue; }
+      if(!leg){ leg={id:A.id,side:a.side,seq:[a.at],d0:s.day,d1:s.day,rt:0,mv:0}; continue; }
       if(a.at!==leg.seq[leg.seq.length-1]){
-        if(leg.seq.includes(a.at)){ if(leg.seq.length>1) legs.push(leg); leg={id:A.id,side:a.side,seq:[leg.seq[leg.seq.length-1],a.at],d0:s.day,d1:s.day}; }
-        else { leg.seq.push(a.at); leg.d1=s.day; } }
+        if(leg.seq.includes(a.at)){ if(leg.seq.length>1) legs.push(leg); leg={id:A.id,side:a.side,seq:[leg.seq[leg.seq.length-1],a.at],d0:s.day,d1:s.day,rt:0,mv:0}; }
+        else { leg.seq.push(a.at); leg.d1=s.day; }
+        leg.mv++; if(a.mt==="retreat") leg.rt++; }
       if(a.gone) break; }
     if(leg&&leg.seq.length>1) legs.push(leg); }
   // 同一军团来回走同一条路：只画一次，日子取并集；每支军团只在最长的一段旁标名
   const g={}; for(const L of legs){ const k=L.id+"|"+L.seq.join(">"), kr=L.id+"|"+L.seq.slice().reverse().join(">"), o=g[k]||g[kr];
     if(o&&g[k]){ o.d0=Math.min(o.d0,L.d0); o.d1=Math.max(o.d1,L.d1); } else g[k]=L; }
-  const out=Object.values(g), best={}; for(const L of out){ const n=L.seq.length; if(!best[L.id]||n>best[L.id].seq.length||(n===best[L.id].seq.length&&L.d1>best[L.id].d1)) best[L.id]=L; }
+  const out=Object.values(g), best={}; for(const L of out) L.retreat=L.rt*2>L.mv;   // 这一段多半日子奉的是撤回之令 → 撤退
+  for(const L of out){ const n=L.seq.length; if(!best[L.id]||n>best[L.id].seq.length||(n===best[L.id].seq.length&&L.d1>best[L.id].d1)) best[L.id]=L; }
   for(const L of out){ L.label=best[L.id]===L; const all=out.filter(x=>x.id===L.id); L.D0=Math.min(...all.map(x=>x.d0)); L.D1=Math.max(...all.map(x=>x.d1)); }
   return out; }
 function overviewSVG(c){
@@ -4133,7 +4154,7 @@ function overviewSVG(c){
   for(const L of campaignLegs(c)){ const A=armyInfo(c,L.id), k=0.45+0.55*Math.sqrt((A.men0||0)/maxMen);
     const r=arrowPath(routePts(fillSeq(L.seq,c.edges),N),{w0:2.5*k+1,w1:8*k+1.5,wh:16*k+3,hl:34*k+8,s0:16,e0:18});
     if(!r) continue; const sd=L.side.toLowerCase();
-    arrows+=`<path d="${r.d}" class="cp-march ${sd} big"><title>${esc(A.name)} 第 ${L.d0}–${L.d1} 日</title></path>`;
+    arrows+=`<path d="${r.d}" class="cp-march ${sd} big${L.retreat?" retreat":""}"><title>${esc(A.name)} 第 ${L.d0}–${L.d1} 日</title></path>`;
     if(!L.label) continue;
     const txt=`D${L.D0}${L.D1!==L.D0?"–"+L.D1:""}`, anc=L.side==="A"?"end":"start", lx=r.hb.x+(L.side==="A"?-10:10), ly=place(lx,r.hb.y-14,A.gen.name.length*13+txt.length*7+6,anc);
     labels+=`<text x="${r1(lx)}" y="${r1(ly)}" text-anchor="${anc}" class="cm-lbl ${sd}">${esc(A.gen.name)} <tspan class="d">${txt}</tspan></text>`; }
@@ -4143,14 +4164,15 @@ function overviewSVG(c){
   // 标题框、图例、指北
   const d0=dateText(c,1), d1=dateText(c,c.day), res=c.over?(c.over.side?c.sideName(c.over.side)+"胜 · "+c.over.text:c.over.text):`进行中 · 第 ${c.day} 日`;
   h+=`<g transform="translate(26,26)"><rect class="cm-box" width="330" height="70"/><text x="14" y="38" class="cm-title">${esc(c.name.replace(/（.*?）/,""))} · 示意图</text><text x="14" y="58" class="cm-sub">${d0?esc(d0)+" — "+esc(d1)+" · ":""}历时 ${c.day} 日 · ${esc(res)}</text></g>`;
-  h+=`<g transform="translate(26,640)"><rect class="cm-box" width="250" height="134"/>
+  h+=`<g transform="translate(26,616)"><rect class="cm-box" width="250" height="158"/>
     <path d="${arrowPath([{x:14,y:22},{x:70,y:22}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a"/><text x="80" y="26" class="cm-leg">${esc(c.sideName("A"))}进军</text>
     <path d="${arrowPath([{x:14,y:46},{x:70,y:46}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march b"/><text x="80" y="50" class="cm-leg">${esc(c.sideName("B"))}进军</text>
-    <g class="mk mk-battle" transform="translate(24,72)"><circle r="9"/><text y="4.5">⚔</text></g><text x="40" y="76" class="cm-leg">会战（D 日）</text>
-    <g class="mk mk-fire" transform="translate(140,72)"><circle r="9"/><text y="4.5">火</text></g><text x="156" y="76" class="cm-leg">焚粮 / 火攻</text>
-    <g class="mk mk-capture a" transform="translate(22,100)"><path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/><text y="-3" x="5.5">克</text></g><text x="40" y="104" class="cm-leg">攻占</text>
-    <g class="mk mk-collapse" transform="translate(140,98)"><circle r="9"/><text y="4.5">溃</text></g><text x="156" y="102" class="cm-leg">溃散</text>
-    <text x="14" y="126" class="cm-sub">兵旗为终局位置；箭头粗细示兵力</text></g>`;
+    <path d="${arrowPath([{x:14,y:70},{x:70,y:70}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a retreat"/><text x="80" y="74" class="cm-leg">撤退（空心虚线）</text>
+    <g class="mk mk-battle" transform="translate(24,96)"><circle r="9"/><text y="4.5">⚔</text></g><text x="40" y="100" class="cm-leg">会战（D 日）</text>
+    <g class="mk mk-fire" transform="translate(140,96)"><circle r="9"/><text y="4.5">火</text></g><text x="156" y="100" class="cm-leg">焚粮 / 火攻</text>
+    <g class="mk mk-capture a" transform="translate(22,124)"><path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/><text y="-3" x="5.5">克</text></g><text x="40" y="128" class="cm-leg">攻占</text>
+    <g class="mk mk-collapse" transform="translate(140,122)"><circle r="9"/><text y="4.5">溃</text></g><text x="156" y="126" class="cm-leg">溃散</text>
+    <text x="14" y="150" class="cm-sub">兵旗为终局位置；箭头粗细示兵力</text></g>`;
   h+=`<g transform="translate(950,58)"><path d="M0 -26L9 6L0 0L-9 6Z" class="cm-npath"/><text y="22" class="cm-n">北</text></g>`;
   return h+mapFrameSVG(); }
 
@@ -4167,16 +4189,17 @@ function dailySVG(c,i){
   let h=mapBaseSVG({sc:c.sc,nodes:N,edges:c.edges,owners:s.owners,depots:s.depots}), moves="", plans="";
   for(const a of s.armies){ if(a.gone) continue; const sd=a.side.toLowerCase();
     const mv=dayMoveSeq(c,prev&&prev.armies.find(x=>x.id===a.id),a);
-    if(mv){ const r=arrowPath(routePts(mv.seq,N,mv.f0,mv.f1),{w0:2.5,w1:6,wh:12,hl:22,s0:4,e0:2,min:14}); if(r) moves+=`<path d="${r.d}" class="cp-march ${sd} on"/>`; }
+    if(mv){ const r=arrowPath(routePts(mv.seq,N,mv.f0,mv.f1),{w0:2.5,w1:6,wh:12,hl:22,s0:4,e0:2,min:14}); if(r) moves+=`<path d="${r.d}" class="cp-march ${sd} on${a.mt==="retreat"?" retreat":""}"/>`; }
     if(a.path.length){ const seq=a.nx&&a.prog>0?[a.at,...a.path]:[a.at,...a.path]; const r=arrowPath(routePts(seq,N,a.nx&&a.prog>0?a.prog/(c.edge(a.at,a.nx)||{d:1}).d:0,1),{w0:2,w1:4.5,wh:10,hl:18,s0:6,e0:18});
       if(r) plans+=`<path d="${r.d}" class="cp-plan ${sd}"/>`; } }
   h+=marksSVG(dayMarks(c,s.day,false),N)+flagsSVG(snapFlags(c,s))+`<g class="cp-arrows">${plans}${moves}</g>`;
   const dt=dateText(c,s.day);
   h+=`<g transform="translate(26,26)"><rect class="cm-box" width="250" height="62"/><text x="14" y="34" class="cm-title" style="font-size:26px">第 ${s.day} 日</text><text x="14" y="52" class="cm-sub">${dt?esc(dt)+" · ":""}${esc(s.weather||"")}</text></g>`;
-  h+=`<g transform="translate(26,700)"><rect class="cm-box" width="300" height="74"/>
+  h+=`<g transform="translate(26,676)"><rect class="cm-box" width="300" height="98"/>
     <path d="${arrowPath([{x:14,y:20},{x:62,y:20}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a on"/><text x="72" y="24" class="cm-leg">当日行进</text>
     <path d="${arrowPath([{x:150,y:20},{x:198,y:20}],{w0:1.5,w1:3,wh:7,hl:10,s0:0,e0:0,min:5}).d}" class="cp-plan a"/><text x="208" y="24" class="cm-leg">既定去向</text>
-    <text x="14" y="46" class="cm-sub">兵旗下两条：兵员、组织；虚框为军心动摇</text><text x="14" y="64" class="cm-sub">⚔ 会战 · 火 焚粮 · 克 攻占 · 溃 溃散</text></g>`;
+    <path d="${arrowPath([{x:14,y:44},{x:62,y:44}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a on retreat"/><text x="72" y="48" class="cm-leg">当日撤退</text>
+    <text x="14" y="70" class="cm-sub">兵旗下两条：兵员、组织；虚框为军心动摇</text><text x="14" y="88" class="cm-sub">⚔ 会战 · 火 焚粮 · 克 攻占 · 溃 溃散</text></g>`;
   h+=`<g transform="translate(950,58)"><path d="M0 -26L9 6L0 0L-9 6Z" class="cm-npath"/><text y="22" class="cm-n">北</text></g>`;
   return h+mapFrameSVG(); }
 
