@@ -16,6 +16,7 @@ const inner = [
   `<script id="camp-ui">\n${rd(ui.camp)}</script>`,
   `<script id="report-map">\n${rd(ui.rmap)}</script>`,
   `<script id="camp-lab">\n${rd(ui.lab)}</script>`,
+  `<script id="batch-camp">\n${rd(ui.cbatch)}</script>`,
   `<script id="play-ui">\n${rd(ui.play)}</script>`,
 ].join("\n");
 fs.mkdirSync(path.join(ROOT, "dist"), { recursive: true });

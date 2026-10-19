@@ -640,6 +640,13 @@ header.top,nav,button,.btn,.seg,.pick,.ph-bar,.lbl,.chip,.stage-pill,.day-pill,.
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text}
 svg,img{-webkit-user-drag:none}
+/* 战役批量推演 */
+.cb-set{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:8px 14px;align-items:end}
+.cb-set .cb-lords{grid-column:1/-1}
+.cb-bars{display:grid;gap:4px} .cb-bar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(80px,2fr) 3.5em;gap:8px;align-items:center;font-size:12.5px}
+.cb-bar b{text-align:right}
+.cb-rows{max-height:320px;overflow:auto}
+#bk-camp h3{margin:12px 0 6px;font-size:14px;border-bottom:1px solid var(--rule);padding-bottom:3px}
 </style>
 </head>
 <body>

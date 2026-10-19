@@ -18,7 +18,7 @@
 npm run build        # 生成 dist/index.html（直接用浏览器打开）、dist/artifact.html 和控件样板 dist/ui-kit.html
 npm run serve        # 本地预览 http://localhost:8848（不缓存，构建后刷新即见）
 npm test             # 回归测试（战役能打完、同种子可复现、历史模式吻合度、烧仓/截粮/火攻规则）
-npm run sim -- YILING 50 --history 0.8      # 命令行批量推演
+npm run sim -- YILING 50 --history 0.8      # 命令行批量推演（页面里：编辑器 → 批量推演 → 战役批量）
 npm run sim -- GUANDU --log 1003 --history 1 # 打印某一局的完整日志
 npm run export-scenarios                     # 内置剧本导出为 scenarios/*.json
 ```
@@ -40,6 +40,7 @@ src/
   ui/map_svg.js            地图绘制（道路曲线、进军箭头、兵旗、标记），战役地图与报告共用
   ui/report_map.js         战役报告：战役示意图、每日战况回放、导出 PNG
   ui/camp_lab.js           编辑器 · 战役沙盘：按当前剧本试推、即时修改军团与据点、快速批量
+  ui/batch_camp.js         编辑器 · 批量推演的「战役批量」：选剧本 / 方式 / 主帅覆盖，统计结局、吻合度、损失与决策，逐局可在沙盘重演
   ui/play.js               游玩模式：战役开局大厅、选战例大厅、战场军令（玩家下达战术）
   ui/kit.html              控件样板（构建为 dist/ui-kit.html）
 tools/
