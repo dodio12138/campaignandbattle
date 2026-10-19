@@ -10,7 +10,7 @@ function armyInfo(c,id){ return c.armies.find(a=>a.id===id)||{gen:{name:"?"},nam
 function dateText(c,day){ const dt=c.hist&&c.hist.startDate?c.dateOf(day):null; return dt?`${dt.y}${dt.mn}月${dt.d}`:""; }
 /* 某日的会战、焚粮、火攻、攻占、溃散 → 地图标记 */
 function dayMarks(c,day,withLabel,ph=null){ const out=[], L=d=>withLabel?"D"+d:"", inPh=x=>ph==null||x.ph==null||x.ph===ph;
-  for(const b of c.battles) if((day==null||b.day===day)&&inPh(b)) out.push({node:b.node,kind:"battle",label:L(b.day),title:`第 ${b.day} 日 ${b.desc||b.place}`});
+  c.battles.forEach((b,i)=>{ if((day==null||b.day===day)&&inPh(b)) out.push({node:b.node,kind:"battle",label:L(b.day),title:`第 ${b.day} 日 ${b.desc||b.place}`,bi:[i]}); });
   for(const e of c.events){ if(day!=null&&e.day!==day) continue; if(!inPh(e)) continue;
     if(e.type==="fire"&&e.f>0) out.push({node:e.node,kind:"fire",side:e.by,label:L(e.day),title:`第 ${e.day} 日 ${c.sideName(e.by)}火攻${c.nodes[e.node].name}`});
     else if(e.type==="depot"&&e.amount>=Math.max(5,e.before*0.15)) out.push({node:e.node,kind:"fire",side:e.side==="A"?"B":"A",label:L(e.day),title:`第 ${e.day} 日 ${c.nodes[e.node].name}粮仓被焚 ${Math.round(e.amount)}`});
@@ -18,7 +18,7 @@ function dayMarks(c,day,withLabel,ph=null){ const out=[], L=d=>withLabel?"D"+d:"
     else if(e.type==="collapse"){ const s=snapDays(c).find(x=>x.day===e.day), a=s&&s.armies.find(x=>x.id===e.army); if(a) out.push({node:a.at,kind:"collapse",side:e.side,label:L(e.day),title:`第 ${e.day} 日 ${armyInfo(c,e.army).name}断粮溃散`}); } }
   if(day!=null) return out;
   // 全程示意图：同一据点同一类标记合并为一个，标注日子（多则写首末日与次数）
-  const g={}; for(const m of out){ const k=m.node+"|"+m.kind+"|"+(m.side||""); (g[k]=g[k]||{...m,days:[],titles:[]}); g[k].days.push(+m.label.slice(1)); g[k].titles.push(m.title); }
+  const g={}; for(const m of out){ const k=m.node+"|"+m.kind+"|"+(m.side||""); (g[k]=g[k]||{...m,days:[],titles:[],bi:[]}); g[k].days.push(+m.label.slice(1)); g[k].titles.push(m.title); if(m.bi) g[k].bi.push(...m.bi); }
   return Object.values(g).map(m=>{ const d=[...new Set(m.days)].sort((x,y)=>x-y);
     return {...m,label:d.length<=2?d.map(x=>"D"+x).join("·"):`D${d[0]}–${d[d.length-1]} ×${m.days.length}`,title:m.titles.join("\n")}; }); }
 function snapFlags(c,s,prev){ const N=c.nodes; if(prev===undefined) prev=snapDays(c).find(x=>x.day===s.day-1)||null;
@@ -146,3 +146,28 @@ function downloadMapPNG(svg,name){
   img.src=url; }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-rmdl]"); if(!b) return; const svg=document.getElementById(b.dataset.rmdl); if(!svg) return;
   const day=b.dataset.rmdl==="rm-day"?"_"+($("#rd-lbl")?$("#rd-lbl").textContent.split(" /")[0].replace(/\s/g,""):""):"_示意图"; downloadMapPNG(svg,(camp?camp.name:"战役")+day); });
+
+/* ---------- 回顾：点会战图标（或会战一览中的一行）弹出战果卡 ---------- */
+function battleCardHTML(c,b){ const nm=s=>esc(c.sideName(s)), sides=[b.att,b.def], P0=b.ph!=null?PERIODS[b.ph]:null;
+  const when=`第 ${b.day} 日${P0?" · "+(b.span>1?`${P0.n}至${b.ph+b.span-1>=6?"次日":""}${PERIODS[(b.ph+b.span-1)%6].n}`:P0.n):""}`;
+  const res=b.raidOk?`${nm(b.raidOk)}奇袭得手（焚辎重 ${Math.round((b.burnt||0)*100)}%）`:b.winner?`${nm(b.winner)}胜 · ${esc(b.reason||"")}`:`相持 · ${esc(b.reason||"各自收兵")}`;
+  const side=s=>{ const m=b.men&&b.men[s], loss=b.lossPct&&b.lossPct[s], ty=b.types&&b.types[s];
+    const tl=ty?Object.entries(ty).filter(([,v])=>v>0.005).sort((x,y)=>y[1]-x[1]).map(([k,v])=>`${esc(k)} ${Math.round(v*100)}%`).join(" · "):"";
+    return `<div class="vs-side ${s.toLowerCase()}"><b>${nm(s)} · ${s===b.att?"攻":"守"}</b><span>${(b.armies[s]||[]).map(x=>esc(x.split(" · ")[0])).join("、")}</span>
+      ${m?`<span class="mono">${(m[0]/10000).toFixed(2)} 万 → ${(m[1]/10000).toFixed(2)} 万</span>`:""}<span class="note">损 ${Math.round((loss||0)*100)}%${b.withdrew===s?" · 撤出":""}${b.winner===s?" · 胜":""}</span>${tl?`<span class="note">${tl}</span>`:""}</div>`; };
+  return `<div class="bt-card"><div class="bt-h"><b>${esc(b.place)}之战</b><span class="note">${when} · ${esc(b.mode)}${b.night?" · 夜":""}${b.weather&&b.weather!=="晴"?" · "+esc(b.weather):""}</span></div>
+    <div class="bt-res ${(b.raidOk||b.winner||"").toLowerCase()}">${res}</div>
+    <div class="vs">${side(sides[0])}<span class="vs-x">對</span>${side(sides[1])}</div>
+    <dl class="kv">${b.rounds?`<dt>回合 · 时段</dt><dd>${b.rounds} · ${b.span||1}</dd>`:""}${b.burnt>0.01?`<dt>焚辎重</dt><dd>${Math.round(b.burnt*100)}%</dd>`:""}${b.pursuit?`<dt>追击损失系数</dt><dd>${Math.round(b.pursuit*100)}%</dd>`:""}</dl>
+    ${b.men?"":`<div class="note">此局为旧存档，只记了战报一行：${esc(b.desc||"")}</div>`}</div>`; }
+function openBattlePop(list,x,y){ let el=document.getElementById("bt-pop"); if(!el){ el=document.createElement("div"); el.id="bt-pop"; el.setAttribute("role","dialog"); document.body.appendChild(el); }
+  el.innerHTML=`<div class="bt-pop-h"><span class="lbl">战果 · ${list.length} 战</span><button type="button" class="btn sm" data-btclose aria-label="关闭">×</button></div><div class="bt-pop-b">${list.map(b=>battleCardHTML(camp,b)).join("")}</div>`;
+  el.hidden=false; const w=Math.min(380,innerWidth-24), h=el.offsetHeight; el.style.width=w+"px";
+  el.style.left=Math.max(12,Math.min(innerWidth-w-12,x+14))+"px"; el.style.top=Math.max(12,Math.min(innerHeight-Math.min(h,innerHeight*0.7)-12,y-20))+"px"; el.querySelector("[data-btclose]").focus(); }
+function closeBattlePop(){ const el=document.getElementById("bt-pop"); if(el) el.hidden=true; }
+document.addEventListener("click",e=>{ const t=e.target;
+  if(t.closest("[data-btclose]")){ closeBattlePop(); return; }
+  const m=t.closest("[data-bi]"); if(m&&camp){ const list=m.dataset.bi.split(",").map(Number).map(i=>camp.battles[i]).filter(Boolean); if(list.length){ e.stopPropagation(); openBattlePop(list,e.clientX,e.clientY); } return; }
+  if(!t.closest("#bt-pop")) closeBattlePop(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeBattlePop();
+  if((e.key==="Enter"||e.key===" ")&&e.target.closest&&e.target.closest("[data-bi]")){ e.preventDefault(); const r=e.target.getBoundingClientRect(); e.target.dispatchEvent(new MouseEvent("click",{bubbles:true,clientX:r.right,clientY:r.top})); } });

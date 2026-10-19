@@ -405,6 +405,8 @@ class Campaign{
     const n=this.nodes[e.node]; const r=bt.result(); const map={A:e.att,B:e.def};   // 战斗方 → 战役方
     const byCid={}; for(const a of this.armies) for(const u of a.units) byCid[u.cid]=u;
     const cargo0={}; for(const cs of ["A","B"]) for(const id of e.armies[cs]){ const a=this.army(id); if(a&&a.cargo>0) cargo0[id]=a.cargo; }
+    const menOf0=cs=>e.armies[cs].reduce((t,id)=>t+this.combatUnits(this.army(id)).reduce((q,u)=>q+u.men,0),0), men0={A:menOf0("A"),B:menOf0("B")};   // 战前兵员（报告回顾用）
+    const gens={}; for(const cs of ["A","B"]) gens[cs]=e.armies[cs].map(id=>this.army(id).gen.name);
     const pre={}; for(const cs of ["A","B"]) pre[cs]=e.armies[cs].reduce((t,id)=>t+this.power(this.army(id)),0);
     let depotLeft=0, depotHad=0, captured=0;
     for(const bs of ["A","B"]) for(const u of bt[bs].units){
@@ -424,7 +426,10 @@ class Campaign{
     const menOf=cs=>e.armies[cs].reduce((t,id)=>t+this.combatUnits(this.army(id)).reduce((q,u)=>q+u.men,0),0);
     this.battles.push({day:this.day,ph:e.ph??this.ph,met:!!e.met,node:e.node,place:n.name,mode:e.mode,night:e.night,weather:this.weather,att:e.att,def:e.def,armies:{A:e.armies.A.map(id=>this.army(id).name),B:e.armies.B.map(id=>this.army(id).name)},
       lossPct:{[e.att]:r.A.loss,[e.def]:r.B.loss},burnt:Math.max(r.A.burnt||0,r.B.burnt||0),depotBurn:depotHad>0?depotHad-depotLeft:0,winner:wC,reason:r.reason,raidOk:(r.A.missionDone==="success"&&r.A.mission==="destroy")?e.att:((r.B.missionDone==="success"&&r.B.mission==="destroy")?e.def:null),desc,
-      armyIds:{A:[...e.armies.A],B:[...e.armies.B]}});
+      armyIds:{A:[...e.armies.A],B:[...e.armies.B]},
+      // 回顾：战前战后兵员、各兵种损失、回合与时段、终局缘由
+      men:{A:[Math.round(men0.A),Math.round(menOf("A"))],B:[Math.round(men0.B),Math.round(menOf("B"))]},gens,rounds:bt.rnd,span,mode2:r.stage,
+      types:{[e.att]:r.A.types,[e.def]:r.B.types},withdrew:bt.retreatSide?map[bt.retreatSide.name]:null,pursuit:Math.round((bt.pursuit||0)*1000)/1000});
     for(const id of e.histLuck||[]){ const a=this.hist.anchors.find(x=>x.id===id), rec=this.battles[this.battles.length-1]; if(!a||this.histDone[id]) continue;   // 战运锚点：仅在战果合于史时记入史
       if(rec.winner===a.side||rec.raidOk===a.side||(a.side===e.att&&rec.burnt>0.3)||(a.side===e.def&&!rec.winner)){ this.histDone[id]="fired"; this.histFired.push({day:this.day,id,text:a.text,node:e.node}); this.note(`〔史〕${a.text}`,"hist"); } }
     e.histLuck=null;

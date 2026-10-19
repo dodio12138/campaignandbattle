@@ -113,5 +113,6 @@ function flagsSVG(list,o={}){ const stack={}; let h="";
 function marksSVG(marks,N){ const cnt={}; let h="";
   for(const m of marks){ const n=N[m.node]; if(!n) continue; const k=cnt[m.node]=(cnt[m.node]||0)+1, x=n.x+20+(k-1)*24, y=n.y+16, sd=(m.side||"").toLowerCase();
     const glyph={battle:"⚔",fire:"火",capture:"克",collapse:"溃"}[m.kind]||"·";
-    h+=`<g class="mk mk-${m.kind} ${sd}" transform="translate(${x},${y})"><title>${esc(m.title||"")}</title>${m.kind==="capture"?`<path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/>`:`<circle r="10"/>`}<text y="${m.kind==="capture"?-3:4.5}" x="${m.kind==="capture"?5.5:0}">${glyph}</text>${m.label?`<text class="mk-l" y="${k%2?22:34}">${esc(m.label)}</text>`:""}</g>`; }
+    const bi=m.bi&&m.bi.length?` data-bi="${m.bi.join(",")}" tabindex="0" role="button" aria-label="${esc((m.title||"").split("\n")[0])}：点开看战果"`:"";
+    h+=`<g class="mk mk-${m.kind} ${sd}${bi?" mk-click":""}"${bi} transform="translate(${x},${y})"><title>${esc(m.title||"")}</title>${m.kind==="capture"?`<path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/>`:`<circle r="10"/>`}<text y="${m.kind==="capture"?-3:4.5}" x="${m.kind==="capture"?5.5:0}">${glyph}</text>${m.label?`<text class="mk-l" y="${k%2?22:34}">${esc(m.label)}</text>`:""}</g>`; }
   return h; }

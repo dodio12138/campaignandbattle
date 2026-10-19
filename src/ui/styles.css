@@ -613,3 +613,19 @@ body.vw #b-back,body.vw #b-side{display:none}
 @media (min-width:1100px) and (min-height:620px){ #v-campedit.on .wb{flex:1;min-height:0;align-items:stretch} #v-campedit.on{overflow:hidden!important} .wb-camp .wb-main{display:flex;flex-direction:column;min-height:0} .wb-camp .sb-card{flex:1} }
 @media (max-width:1200px){.wb-camp{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 @media (max-width:900px){.wb-camp{grid-template-columns:minmax(0,1fr)}}
+/* 回顾：会战图标可点，战果卡 */
+.cmap .mk-click{cursor:pointer} .cmap .mk-click:hover circle,.cmap .mk-click:focus-visible circle{stroke:var(--brass);stroke-width:3} .cmap .mk-click:focus-visible{outline:none}
+.rtab tr.bt-row{cursor:pointer} .rtab tr.bt-row:hover td,.rtab tr.bt-row:focus-visible td{background:var(--panel-2)} .rtab tr.bt-row:focus-visible{outline:2px solid var(--brass)}
+#bt-pop{position:fixed;z-index:30;background:var(--panel);border:2px solid var(--ink);box-shadow:0 10px 30px rgba(0,0,0,.28);max-height:70vh;display:flex;flex-direction:column}
+#bt-pop .bt-pop-h{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-bottom:1px solid var(--rule)}
+#bt-pop .bt-pop-b{overflow:auto;padding:8px;display:grid;gap:10px}
+.bt-card{display:grid;gap:6px;font-size:12.5px} .bt-card+.bt-card{border-top:1px dotted var(--rule);padding-top:10px}
+.bt-h{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline} .bt-h b{font-family:var(--f-display);font-weight:400;font-size:20px}
+.bt-res{font-weight:700;border-left:4px solid var(--ink-2);padding:1px 8px;background:var(--panel-2)} .bt-res.a{border-color:var(--a);color:var(--a)} .bt-res.b{border-color:var(--b);color:var(--b)}
+/* 界面文字不可选：凡是拿来点、拖的（按钮、页签、标签、列表项、时段条、地图、战场、兵牌、图例、卡片标题）——免得点按时选中一片字。
+   战报、日志、说明、史书体纪事与输入框仍可选，便于复制 */
+header.top,nav,button,.btn,.seg,.pick,.ph-bar,.lbl,.chip,.stage-pill,.day-pill,.phase-pill,.histbadge,.legend,.cmap,.map,.field,.ctr,.mini,
+.flags,.pen,.kbd-hint,.card>h2,.vs,.tlist,.rtabs,.form-chips,summary,.chk,.cp-army,.ev,.wallbar,.palisade,.rout-tray,.zone-lbl,.ed-map,.ph-bar span,.bt-pop-h{
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text}
+svg,img{-webkit-user-drag:none}
