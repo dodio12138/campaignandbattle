@@ -342,7 +342,7 @@ function tacticsImport(o){ if(!o||!o.list) return; if(typeof o.w==="number") T_C
     if(d.conds) d.conds.forEach((c,i)=>{ if(T.phases[i]&&i>0&&c) T.phases[i].cond=JSON.parse(JSON.stringify(c)); });
     if(d.aborts) T.aborts=JSON.parse(JSON.stringify(d.aborts)); if(d.boosts) T.boosts=JSON.parse(JSON.stringify(d.boosts)); } }
 function tacticsReset(){ T_COUNTER_WEIGHT=1.0; tacticsImport({w:1,list:JSON.parse(T_DEFAULT_SNAPSHOT)}); }
-const PLAN_NAME={FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"};
+const PLAN_NAME={NIGHT:"夜战续攻",FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"};
 const TACTIC_BY_ID=Object.fromEntries(TACTICS.map(t=>[t.id,t]));
 
 /* ───────── 指挥官 AI ───────── */
@@ -465,6 +465,9 @@ class TacticalAI{
     // 劫粮不再是夜议方略：由战役地图上派出以"焚粮"为目标的军团、实际接战来完成
     if(!besieged) add("WITHDRAW",-0.7-rsv*1.4+(fieldFood&&w.myFood<=2?0.6:0)+(fieldFood&&w.myFood<=0?0.8:0)+(fail>=2?0.55:0)+(s.li<=1?0.5:0)+(s.li===0?0.4:0)-p.risk*0.7+p.def*0.4+((d.lossFrac||0)>0.2?0.2:0)+(fail>=3?0.3:0),
         fail>=2?`久攻不下已 ${fail} 日，伤亡持续`:`形势${s.label}，难以为继`);
+    // 夜战续攻：敌阵动摇、我占上风，乘夜不解甲（好险者、多谋者更肯为之；攻坚城则不宜）
+    if(v.contact||(d.attackRounds||0)>0) add("NIGHT",-0.05+(has(s,"敌阵动摇")?0.45:0)+(s.score>0.3?0.25:0)+p.risk*0.6+p.guile*0.3+((v.me.int??60)>=75?0.1:0)-(myOrg<0.5?0.6:0)-(besieger&&(w.enWall||0)>0.3?0.8:0)-(besieged?1:0),
+        `敌阵动摇，乘夜续攻，不使喘息`);
     if(besieged&&w.myFood!=null&&w.myFood<=0) add("SURRENDER",-0.2+(s.li<=2?0.6:0)+(w.starving||0)*0.25-p.risk*0.3,`粮尽 ${w.starving||0} 日，军无斗志`);
     opts.sort((a,b)=>b.sc-a.sc); const best=opts[0], second=opts[1]; if(best.id==="RAID") this.raids=(this.raids||0)+1;
     this.plan=best.id; this.dayForced=best.id==="SORTIE"?"SORTIE":null; this.cur=null; this.lastEval=-99;

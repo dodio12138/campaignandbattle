@@ -46,6 +46,10 @@ function arrowPath(pts,o={}){
   const barbL=[bk.x-bk.ty*wh,bk.y+bk.tx*wh], barbR=[bk.x+bk.ty*wh,bk.y-bk.tx*wh];
   const all=[[t0.x,t0.y],...Lp,barbL,[tip.x,tip.y],barbR,...Rp.reverse()];
   return {d:"M"+all.map(([x,y])=>r1(x)+" "+r1(y)).join("L")+"Z", tip, hb}; }
+/* 小尖头：自军团当下所在，沿道路指向下一站（只画这一步，逐时段更新） */
+function stepArrow(c,at,nx,prog){ if(!nx) return ""; const N=c.nodes, e=c.edge(at,nx); if(!e) return ""; const f0=Math.min(0.9,(prog||0)/e.d), pts=[];
+  for(let k=0;k<=12;k++) pts.push(roadAt(at,N[at],nx,N[nx],f0+(1-f0)*k/12));
+  const r=arrowPath(pts,{w0:1.4,w1:1.8,wh:5,hl:10,s0:Math.min(10,4),e0:16,min:16}); return r?r.d:""; }
 function marchArrow(seq,N,o){ const r=arrowPath(routePts(seq,N),o); return r?r.d:""; }
 /* 补全据点序列：相邻两点之间若无直连道路，按道路最短跳数补上中间据点 */
 function fillSeq(seq,edges){ const adj={}; for(const e of edges){ (adj[e.a]=adj[e.a]||[]).push(e.b); (adj[e.b]=adj[e.b]||[]).push(e.a); }

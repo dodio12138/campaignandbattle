@@ -14,7 +14,7 @@
     <button role="tab" aria-selected="false" data-mode="edit" data-view="v-batch" id="tab-batch" hidden>批量推演</button>
   </nav>
   <div class="sub" id="top-sub">选剧本开战役，或选战例打一场会战</div>
-  <span class="ver">v19 · 游玩 / 编辑器</span>
+  <span class="ver">v21 · 游玩 / 编辑器</span>
 </header>
 
 <div class="layout">
@@ -35,7 +35,7 @@
           <select id="speed" class="btn" aria-label="推演速度" style="padding:4px 6px">
             <option value="1400">慢</option><option value="800" selected>中</option><option value="380">快</option><option value="120">极快</option>
           </select>
-          <div class="turn"><span class="stage-pill" id="stage">野战</span><span class="day-pill" id="day">第1日</span><span>回合</span><span class="rnd" id="rnd">0</span><span class="phase-pill" id="phase" data-p="0">远距</span></div>
+          <div class="turn"><span class="ph-bar mini" id="bph" aria-label="时段"></span><span class="stage-pill" id="stage">野战</span><span class="day-pill" id="day">第1日</span><span>回合</span><span class="rnd" id="rnd">0</span><span class="phase-pill" id="phase" data-p="0">远距</span></div>
         </div>
         <div class="map" id="map">
           <div class="field" id="field">
@@ -95,7 +95,9 @@
         <div id="mode-extra" style="display:grid;gap:6px"></div>
         <div class="slider-row"><span class="lbl">会战天数</span><input type="range" id="days" min="1" max="60" step="1"><output id="days-o"></output></div>
         <div class="form-row"><span class="lbl">天气</span><select id="weather"><option>晴</option><option>雨</option><option>大风</option><option>雾</option><option>雪</option><option>酷暑</option></select></div>
-        <label class="chk"><input type="checkbox" id="night"> 夜战（远程大减、计谋易成、易溃）</label>
+        <div class="form-row"><span class="lbl">开战时段</span><select id="startph" aria-label="开战时段"></select></div>
+        <label class="chk"><input type="checkbox" id="night"> 奇袭：白天开战时，首个时段也按夜战论（拂晓奇袭）</label>
+        <div class="note">白天每段约 4 回合（傍晚 3），夜间每段 5 回合；傍晚议事，可收兵过夜，或夜战续攻。</div>
         <div class="slider-row" id="hold-row"><span class="lbl">对射回合</span><input type="range" id="hold" min="0" max="4" step="1"><output id="hold-o"></output></div>
       </div>
     </section>

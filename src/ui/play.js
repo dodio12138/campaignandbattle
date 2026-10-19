@@ -100,7 +100,7 @@ function renderBLobby(){
     </div></section>
     <section class="card"><h2>战例 <span class="lbl">${p.mode}战</span></h2><div class="body">
       <p class="lobby-title">${esc(t1)}</p>${t2?`<div class="note">${esc(t2)}</div>`:""}
-      <dl class="kv"><dt>地形</dt><dd>${p.terrain}</dd><dt>会战模式</dt><dd>${p.mode}</dd><dt>预定日数</dt><dd>${p.days||1} 日</dd><dt>天气</dt><dd>${p.weather||"晴"}${p.night?" · 夜战":""}</dd></dl>
+      <dl class="kv"><dt>地形</dt><dd>${p.terrain}</dd><dt>会战模式</dt><dd>${p.mode}</dd><dt>预定日数</dt><dd>${p.days||1} 日</dd><dt>天气</dt><dd>${p.weather||"晴"}</dd><dt>开战</dt><dd>${PERIODS[presetStart(p)].n}${PERIODS[presetStart(p)].night?" · 夜战":""}</dd></dl>
       <div class="note">${MODE_BRIEF[p.mode]||""}</div>
       <div class="vs">${vsSide("A")}<span class="vs-x">對</span>${vsSide("B")}</div>
       <div><div class="lbl">你的指挥</div><div class="seg" id="bl-side">${segBtns("s",[["A","甲军"],["B","乙军"],["","观战"]],PLAY.pref)}</div></div>

@@ -2,12 +2,16 @@
    数据来自 camp.stats[].armies / owners（逐日快照，旧存档没有）、camp.battles、camp.events、camp.log */
 
 function snapDays(c){ return c.stats.filter(s=>s.armies); }
+/* 回放帧：有逐时段记录（六时段版）就按时段，否则按日 */
+function frameList(c){ if(c.frames&&c.frames.length) return c.frames.map(f=>({day:f.d,ph:f.p,weather:f.w,owners:f.o,depots:f.dp,
+    armies:f.a.map(x=>({id:x[0],at:x[1],nx:x[2],prog:x[3],gone:!!x[4],mt:x[5],men:x[6],org:x[7],n:x[8],sh:x[9],side:x[10],path:x[11]||[],order:x[12]||null}))}));
+  return snapDays(c).map(s=>({...s,ph:null})); }
 function armyInfo(c,id){ return c.armies.find(a=>a.id===id)||{gen:{name:"?"},name:id}; }
 function dateText(c,day){ const dt=c.hist&&c.hist.startDate?c.dateOf(day):null; return dt?`${dt.y}${dt.mn}月${dt.d}`:""; }
 /* 某日的会战、焚粮、火攻、攻占、溃散 → 地图标记 */
-function dayMarks(c,day,withLabel){ const out=[], L=d=>withLabel?"D"+d:"";
-  for(const b of c.battles) if(day==null||b.day===day) out.push({node:b.node,kind:"battle",label:L(b.day),title:`第 ${b.day} 日 ${b.desc||b.place}`});
-  for(const e of c.events){ if(day!=null&&e.day!==day) continue;
+function dayMarks(c,day,withLabel,ph=null){ const out=[], L=d=>withLabel?"D"+d:"", inPh=x=>ph==null||x.ph==null||x.ph===ph;
+  for(const b of c.battles) if((day==null||b.day===day)&&inPh(b)) out.push({node:b.node,kind:"battle",label:L(b.day),title:`第 ${b.day} 日 ${b.desc||b.place}`});
+  for(const e of c.events){ if(day!=null&&e.day!==day) continue; if(!inPh(e)) continue;
     if(e.type==="fire"&&e.f>0) out.push({node:e.node,kind:"fire",side:e.by,label:L(e.day),title:`第 ${e.day} 日 ${c.sideName(e.by)}火攻${c.nodes[e.node].name}`});
     else if(e.type==="depot"&&e.amount>=Math.max(5,e.before*0.15)) out.push({node:e.node,kind:"fire",side:e.side==="A"?"B":"A",label:L(e.day),title:`第 ${e.day} 日 ${c.nodes[e.node].name}粮仓被焚 ${Math.round(e.amount)}`});
     else if(e.type==="capture") out.push({node:e.node,kind:"capture",side:e.side,label:L(e.day),title:`第 ${e.day} 日 ${c.sideName(e.side)}攻占${c.nodes[e.node].name}`});
@@ -17,7 +21,8 @@ function dayMarks(c,day,withLabel){ const out=[], L=d=>withLabel?"D"+d:"";
   const g={}; for(const m of out){ const k=m.node+"|"+m.kind+"|"+(m.side||""); (g[k]=g[k]||{...m,days:[],titles:[]}); g[k].days.push(+m.label.slice(1)); g[k].titles.push(m.title); }
   return Object.values(g).map(m=>{ const d=[...new Set(m.days)].sort((x,y)=>x-y);
     return {...m,label:d.length<=2?d.map(x=>"D"+x).join("·"):`D${d[0]}–${d[d.length-1]} ×${m.days.length}`,title:m.titles.join("\n")}; }); }
-function snapFlags(c,s){ const N=c.nodes; return s.armies.filter(a=>!a.gone||(snapDays(c).find(x=>x.day===s.day-1)||{armies:[]}).armies.some(p=>p.id===a.id&&!p.gone)).map(a=>{ const A=armyInfo(c,a.id), p=armyXY(N,a.at,a.nx,a.prog,a.nx?c.edge(a.at,a.nx).d:1);
+function snapFlags(c,s,prev){ const N=c.nodes; if(prev===undefined) prev=snapDays(c).find(x=>x.day===s.day-1)||null;
+  return s.armies.filter(a=>!a.gone||(prev||{armies:[]}).armies.some(p=>p.id===a.id&&!p.gone)).map(a=>{ const A=armyInfo(c,a.id), p=armyXY(N,a.at,a.nx,a.prog,a.nx?c.edge(a.at,a.nx).d:1);
   return {...p,side:a.side,gen:A.gen.name,name:A.name,id:a.id,n:a.n,men:a.men,ratio:a.men/(A.men0||a.men||1),org:a.org,shaken:!!a.sh,tag:a.gone?null:MISSION_TAG[a.mt],gone:a.gone}; }); }
 
 /* ---------- 战役示意图 ---------- */
@@ -81,40 +86,44 @@ function dayMoveSeq(c,p,q){ if(!p||!q||q.gone) return null; const ed=(a,b)=>c.ed
   let f1=1; if(q.nx&&q.prog>0){ seq.push(q.nx); f1=q.prog/ed(q.at,q.nx); }
   if(f0>0&&seq[1]!==p.nx) return {seq,f0:0,f1}; return {seq,f0,f1}; }
 function dailySVG(c,i){
-  const N=c.nodes, S=snapDays(c), s=S[i], prev=S[i-1];
+  const N=c.nodes, S=frameList(c), s=S[i], prev=S[i-1];
   let h=mapBaseSVG({sc:c.sc,nodes:N,edges:c.edges,owners:s.owners,depots:s.depots}), moves="", plans="";
   for(const a of s.armies){ if(a.gone) continue; const sd=a.side.toLowerCase();
+    const rt=a.mt==="retreat"?" retreat":"";
+    // 示意大箭头：受令时定格的去向（逐时段记录里才有；按日记录退回旧画法）
+    if(a.order){ const r=arrowPath(routePts(a.order,N),{w0:2,w1:5,wh:11,hl:20,s0:16,e0:18}); if(r) plans+=`<path d="${r.d}" class="cp-march ${sd}${rt}"/>`; }
+    else if(s.ph==null&&a.path.length){ const r=arrowPath(routePts([a.at,...a.path],N,a.nx&&a.prog>0?a.prog/(c.edge(a.at,a.nx)||{d:1}).d:0,1),{w0:2,w1:4.5,wh:10,hl:18,s0:6,e0:18}); if(r) plans+=`<path d="${r.d}" class="cp-plan ${sd}"/>`; }
+    // 小尖头：本时段（或当日）实际走的这一段
     const mv=dayMoveSeq(c,prev&&prev.armies.find(x=>x.id===a.id),a);
-    if(mv){ const r=arrowPath(routePts(mv.seq,N,mv.f0,mv.f1),{w0:2.5,w1:6,wh:12,hl:22,s0:4,e0:2,min:14}); if(r) moves+=`<path d="${r.d}" class="cp-march ${sd} on${a.mt==="retreat"?" retreat":""}"/>`; }
-    if(a.path.length){ const seq=a.nx&&a.prog>0?[a.at,...a.path]:[a.at,...a.path]; const r=arrowPath(routePts(seq,N,a.nx&&a.prog>0?a.prog/(c.edge(a.at,a.nx)||{d:1}).d:0,1),{w0:2,w1:4.5,wh:10,hl:18,s0:6,e0:18});
-      if(r) plans+=`<path d="${r.d}" class="cp-plan ${sd}"/>`; } }
-  h+=marksSVG(dayMarks(c,s.day,false),N)+flagsSVG(snapFlags(c,s))+`<g class="cp-arrows">${plans}${moves}</g>`;
-  const dt=dateText(c,s.day);
-  h+=`<g transform="translate(26,26)"><rect class="cm-box" width="250" height="62"/><text x="14" y="34" class="cm-title" style="font-size:26px">第 ${s.day} 日</text><text x="14" y="52" class="cm-sub">${dt?esc(dt)+" · ":""}${esc(s.weather||"")}</text></g>`;
+    if(mv){ const r=arrowPath(routePts(mv.seq,N,mv.f0,mv.f1),{w0:1.4,w1:1.8,wh:5,hl:10,s0:2,e0:2,min:8}); if(r) moves+=`<path d="${r.d}" class="cp-step ${sd}"/>`; } }
+  h+=marksSVG(dayMarks(c,s.day,false,s.ph),N)+flagsSVG(snapFlags(c,s,prev||null))+`<g class="cp-arrows">${plans}${moves}</g>`;
+  const dt=dateText(c,s.day), P=s.ph!=null?PERIODS[s.ph]:null;
+  h+=`<g transform="translate(26,26)"><rect class="cm-box" width="270" height="62"/><text x="14" y="34" class="cm-title" style="font-size:26px">第 ${s.day} 日${P?" · "+P.n:""}</text><text x="14" y="52" class="cm-sub">${dt?esc(dt)+" · ":""}${P?P.t+" · ":""}${esc(s.weather||"")}</text></g>`;
+  if(P&&P.night) h+=`<rect width="1000" height="800" class="cm-night" pointer-events="none"/>`;
   h+=`<g transform="translate(26,676)"><rect class="cm-box" width="300" height="98"/>
-    <path d="${arrowPath([{x:14,y:20},{x:62,y:20}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a on"/><text x="72" y="24" class="cm-leg">当日行进</text>
-    <path d="${arrowPath([{x:150,y:20},{x:198,y:20}],{w0:1.5,w1:3,wh:7,hl:10,s0:0,e0:0,min:5}).d}" class="cp-plan a"/><text x="208" y="24" class="cm-leg">既定去向</text>
-    <path d="${arrowPath([{x:14,y:44},{x:62,y:44}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a on retreat"/><text x="72" y="48" class="cm-leg">当日撤退</text>
+    <path d="${arrowPath([{x:14,y:20},{x:62,y:20}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a"/><text x="72" y="24" class="cm-leg">受令去向</text>
+    <path d="${arrowPath([{x:150,y:20},{x:198,y:20}],{w0:1.4,w1:1.8,wh:5,hl:10,s0:0,e0:0,min:5}).d}" class="cp-step a"/><text x="208" y="24" class="cm-leg">${s.ph!=null?"本时段一步":"当日行进"}</text>
+    <path d="${arrowPath([{x:14,y:44},{x:62,y:44}],{w0:2,w1:4,wh:8,hl:12,s0:0,e0:0,min:5}).d}" class="cp-march a retreat"/><text x="72" y="48" class="cm-leg">受令撤退</text>
     <text x="14" y="70" class="cm-sub">兵旗下两条：兵员、组织；虚框为军心动摇</text><text x="14" y="88" class="cm-sub">⚔ 会战 · 火 焚粮 · 克 攻占 · 溃 溃散</text></g>`;
   h+=`<g transform="translate(950,58)"><path d="M0 -26L9 6L0 0L-9 6Z" class="cm-npath"/><text y="22" class="cm-n">北</text></g>`;
   return h+mapFrameSVG(); }
 
 /* ---------- 报告里的两个页签 ---------- */
-function reportMapsHTML(c){ const S=snapDays(c);
+function reportMapsHTML(c){ const S=frameList(c), byPh=S.length&&S[0].ph!=null;
   return {
     map:`<div class="rmap-bar toolbar"><span class="note">全程进军方向、会战与焚粮地点；兵旗为终局位置</span><span class="sp"></span><button class="btn sm" data-rmdl="rm-over">下载 PNG</button></div><svg id="rm-over" class="cmap rmap" viewBox="0 0 1000 800" role="img" aria-label="战役示意图"></svg>`,
-    daily:S.length?`<div class="rmap-bar toolbar"><button class="btn sm" data-rd="-1" aria-label="前一日">◀</button><button class="btn sm primary" id="rd-play">播放</button><button class="btn sm" data-rd="1" aria-label="后一日">▶</button>
+    daily:S.length?`<div class="rmap-bar toolbar">${byPh?`<button class="btn sm" data-rd="-6" aria-label="前一日">«</button>`:""}<button class="btn sm" data-rd="-1" aria-label="${byPh?"前一时段":"前一日"}">◀</button><button class="btn sm primary" id="rd-play">播放</button><button class="btn sm" data-rd="1" aria-label="${byPh?"后一时段":"后一日"}">▶</button>${byPh?`<button class="btn sm" data-rd="6" aria-label="后一日">»</button>`:""}
       <input type="range" id="rd-day" min="0" max="${S.length-1}" value="0" aria-label="日期" style="flex:1;min-width:120px"><b class="mono" id="rd-lbl"></b>
-      <select id="rd-spd" aria-label="播放速度"><option value="1400">慢</option><option value="800" selected>中</option><option value="350">快</option></select><button class="btn sm" data-rmdl="rm-day">下载 PNG</button></div>
+      <select id="rd-spd" aria-label="播放速度"><option value="${byPh?900:1400}">慢</option><option value="${byPh?450:800}" selected>中</option><option value="${byPh?160:350}">快</option></select><button class="btn sm" data-rmdl="rm-day">下载 PNG</button></div>
       <svg id="rm-day" class="cmap rmap" viewBox="0 0 1000 800" role="img" aria-label="每日战况图"></svg><div class="log cp-log rd-log" id="rd-log"></div>`
       :`<p class="note">此局为旧存档，没有逐日位置记录。新开一局即可回放每日战况。</p>`,
     bind(root){ const ov=root.querySelector("#rm-over"); if(ov&&!ov.dataset.done){ ov.innerHTML=overviewSVG(c); ov.dataset.done=1; }
       const dv=root.querySelector("#rm-day"); if(!dv||dv.dataset.done) return; dv.dataset.done=1;
       const sl=root.querySelector("#rd-day"); let timer=null;
       const show=i=>{ i=Math.max(0,Math.min(S.length-1,i)); sl.value=i; dv.innerHTML=dailySVG(c,i); const s=S[i];
-        root.querySelector("#rd-lbl").textContent=`第 ${s.day} 日 / ${S[S.length-1].day}`;
-        const rows=c.log.filter(l=>l.day===s.day).slice().reverse();
-        root.querySelector("#rd-log").innerHTML=`<table><tbody>${rows.map(l=>`<tr class="${l.kind==="hist"?"shi":l.kind}"><td>D${l.day}</td><td>${l.t}</td></tr>`).join("")||'<tr><td></td><td class="note">本日无事</td></tr>'}</tbody></table>`;
+        root.querySelector("#rd-lbl").textContent=`第 ${s.day} 日${s.ph!=null?" "+PERIODS[s.ph].n:""} / ${S[S.length-1].day} 日`;
+        const rows=c.log.filter(l=>l.day===s.day&&(s.ph==null||l.ph==null||l.ph===s.ph)).slice().reverse();
+        root.querySelector("#rd-log").innerHTML=`<table><tbody>${rows.map(l=>`<tr class="${l.kind==="hist"?"shi":l.kind}"><td>D${l.day}${l.ph!=null?"·"+PERIODS[l.ph].n:""}</td><td>${l.t}</td></tr>`).join("")||`<tr><td></td><td class="note">${s.ph!=null?"此时段":"本日"}无事</td></tr>`}</tbody></table>`;
         sl.style.setProperty("--fill",(S.length>1?i/(S.length-1)*100:100)+"%"); };
       const stop=()=>{ clearInterval(timer); timer=null; root.querySelector("#rd-play").textContent="播放"; };
       sl.oninput=()=>{ stop(); show(+sl.value); };
@@ -136,4 +145,4 @@ function downloadMapPNG(svg,name){
     const a=document.createElement("a"); a.download=name+".png"; a.href=cv.toDataURL("image/png"); a.click(); };
   img.src=url; }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-rmdl]"); if(!b) return; const svg=document.getElementById(b.dataset.rmdl); if(!svg) return;
-  const day=b.dataset.rmdl==="rm-day"?"_"+($("#rd-lbl")?$("#rd-lbl").textContent.split(" ")[1]+"日":""):"_示意图"; downloadMapPNG(svg,(camp?camp.name:"战役")+day); });
+  const day=b.dataset.rmdl==="rm-day"?"_"+($("#rd-lbl")?$("#rd-lbl").textContent.split(" /")[0].replace(/\s/g,""):""):"_示意图"; downloadMapPNG(svg,(camp?camp.name:"战役")+day); });

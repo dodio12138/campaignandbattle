@@ -38,7 +38,9 @@ const DEFAULT_P = {
   SKIRMISH_EVADE:0.35, SKIRMISH_EVADE_CAV:0.6, SKIRMISH_MELEE:0.6, SKIRMISH_RECHARGE:2, SKIRMISH_WITHDRAW:0.4,
   SKIRMISH_PURSUIT_TAKEN:0.3, SKIRMISH_PURSUIT_POWER:1.5,
   // —— 多日会战 ——
-  DAY_ROUNDS:15,            // 一日的回合数，日暮收兵
+  PH_ROUNDS_DAY:4,          // 清晨、上午、下午每时段回合数
+  PH_ROUNDS_DUSK:3,         // 傍晚回合数（白天合计 = 3×时段 + 傍晚 = 15）
+  PH_ROUNDS_NIGHT:5,        // 夜间（前半夜、后半夜）每时段回合数：夜袭、夜战续攻
   NIGHT_ORG:0.35,           // 夜间组织度回复（上限的比例，×(0.6+0.4×统帅/100)）
   NIGHT_STAM:70,            // 夜间体力回复
   NIGHT_RALLY:0.5,          // 溃部夜间收拢概率（×统帅/100）
@@ -422,12 +424,21 @@ class Side{
   power(){return this.units.reduce((s,u)=>s+((u.routed||u.isSupply)?0:u.men*Math.max(0,u.orgp)),0)}
 }
 
+/* 一日六时段（战役与战斗共用）：白天四段，夜间两段 */
+const PERIODS=[{n:"后半夜",t:"00–04",night:true},{n:"清晨",t:"04–08"},{n:"上午",t:"08–12"},{n:"下午",t:"12–16"},{n:"傍晚",t:"16–20"},{n:"前半夜",t:"20–24",night:true}];
+const phRounds=ph=>PERIODS[ph].night?P.PH_ROUNDS_NIGHT:(ph===4?P.PH_ROUNDS_DUSK:P.PH_ROUNDS_DAY);
+const dayRounds=()=>3*P.PH_ROUNDS_DAY+P.PH_ROUNDS_DUSK;   // 白天合计回合
 class Battle{
   constructor(spec, seed){
     this.R=makeRng(seed ?? Math.floor(Math.random()*4294967296));
     this.terr=TERRAIN[spec.terrain]; this.mode=spec.mode; this.hold=spec.mode==="攻守"?(spec.hold||0):0;
     this.stage = spec.mode==="围城"?"围城战":(spec.mode==="阵地"?"阵地战":"野战"); this.daily=[]; this.endReason=null;
-    this.days=Math.max(1,spec.days||1); this.day=1; this.dayStart=0; this.weather=spec.weather||"晴"; this.night0=!!spec.night;
+    this.days=Math.max(1,spec.days||1); this.day=1; this.dayStart=0; this.weather=spec.weather||"晴";
+    // 时钟：自开战时段起逐段推进；endPh 为末日收兵的时段（白天开打默认傍晚，夜间开打默认清晨）
+    this.startPh=spec.startPh??(spec.night?5:1); this.ph=this.startPh; this.phR=0; this.clock=0;
+    this.endPh=spec.endPh??(PERIODS[this.startPh].night?(this.days>1?4:1):4);
+    this.dawnRaid=!!spec.night&&!PERIODS[this.startPh].night;   // 拂晓奇袭：开战那一段按夜战论
+    this.night0=PERIODS[this.startPh].night||this.dawnRaid; this.nightFight=PERIODS[this.startPh].night; this.newDay=true; this.hadDay=!PERIODS[this.startPh].night;
     this.bothAtk = spec.mode==="决战"||spec.mode==="遭遇";
     this.A=new Side(this,"A",spec.A,true); this.B=new Side(this,"B",spec.B,this.bothAtk);
     this.phase = this.bothAtk?1:0; this.rnd=0; this.done=false; this.winner=null; this.nightRetreat=false;
@@ -448,6 +459,11 @@ class Battle{
   other(s){return s===this.A?this.B:this.A;}
   get deploying(){return this.A.aliveColumn().length>0||this.B.aliveColumn().length>0;}
   get dayRound(){return this.rnd-this.dayStart;}
+  get isNight(){ return PERIODS[this.ph].night||(this.dawnRaid&&this.clock===0); }
+  /* 今日（或今夜）剩余回合 / 白天回合：供战术 AI 判断"日暮将至" */
+  get dayLeft(){ let n=phRounds(this.ph)-this.phR; if(PERIODS[this.ph].night){ if(this.ph===5) n+=phRounds(0); } else for(let p=this.ph+1;p<=4;p++) n+=phRounds(p); return n/dayRounds(); }
+  get periodsUsed(){ return Math.max(this.clock,this.usedClock||0); }   // 实占时段：交回战役
+  timeText(){ return `第${this.day}日 · ${PERIODS[this.ph].n}`; }
   /* 城墙完好时，攻方只能在有限的城段展开（云梯、城门、缺口） */
   applyWallWidth(){ for(const s of [this.A,this.B]){ const en=this.other(s); s.applyFormationShape(); const w=s.baseWidth; s.width=w;
       const nw = en.wall ? Math.max(2,Math.round(w*(P.WALL_WIDTH_MIN+(1-P.WALL_WIDTH_MIN)*(1-en.wall.W)))) : w;
@@ -455,18 +471,19 @@ class Battle{
   anyFight(){ return [this.A,this.B].some(s=>s.plan==="FIGHT"||s.plan==="SORTIE"); }
   startDay(){ for(const s of [this.A,this.B]) s.dayStats={power0:s.power(), en0:this.other(s).power(), dead0:s.units.reduce((a,u)=>a+u.dead,0), routed0:s.units.filter(u=>u.routed).length, attackRounds:0, contactRounds:0, work0:this.workOf(this.other(s))}; }
   workOf(x){ return x.wall?x.wall.W:(x.fortMax>0?x.fort/x.fortMax:1); }
-  planName(p){ return {FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"}[p]||p; }
+  planName(p){ return {NIGHT:"夜战续攻",FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"}[p]||p; }
 
   step(){
     if(this.done) return;
     const A=this.A,B=this.B,sides=[A,B]; const terr=this.terr;
     this.rnd++; const rnd=this.rnd; const dr=rnd-this.dayStart; this.fx=[];   // fx：本回合攻击动作（供界面动画）
-    if(dr===1){ this.startDay();
-      if(this.day>1&&!this.anyFight()){            // 双方都不出战：整日对垒，直接进入夜间
-        this.rnd+=P.DAY_ROUNDS-1;
+    this.roundPh=this.ph; this.roundIdx=this.phR+1; this.usedClock=this.clock+1;   // 本回合落在第几个时段（自开战算起）
+    if(this.newDay){ this.newDay=false; this.startDay();
+      if(this.day>1&&!PERIODS[this.ph].night&&!this.anyFight()){            // 双方都不出战：整日对垒，直到傍晚议事
+        let left=phRounds(this.ph)-this.phR; for(let p=this.ph+1;p<=4;p++) left+=phRounds(p);
+        this.rnd+=left-1; this.clock+=4-this.ph; this.ph=4; this.phR=0;
         this.events=[{t:`第${this.day}日：两军对垒未战（甲军${this.planName(A.plan)}，乙军${this.planName(B.plan)}）`,s:""}];
-        if(this.day<this.days) this.night(); else { this.winner=null; this.endReason="期满对峙"; this.finish(); }
-        return; } }
+        this.dusk(); return; } }
     if(this.tacticHook) this.tacticHook(this);
     // 战术效果与克制
     for(const s of sides){ const T=s.tactic, E=this.other(s).tactic; const m={atk:1,def:1,orgTaken:1,orgDealt:1,stam:1,charge:1};
@@ -580,7 +597,7 @@ class Battle{
       if(o.screen) act(s,"SHIELD"); if(o.fire) act(s,"FIRE"); if(o.repair) act(s,"REPAIR");
       if(climbW(s)>0) act(s,"CLIMB"); if(fa.W>0) act(s,"WALL_HOLD"); else if(fa.L>0.3) act(s,"FORT_HOLD");
       if(standoff) act(s,"STANDOFF"); if(s.food!=null&&s.food<=0) act(s,"STARVING"); if(this.few[s.name]>0) act(s,"FEW");
-      const W={"雨":"W_RAIN","大风":"W_WIND","雾":"W_FOG","雪":"W_SNOW","酷暑":"W_HEAT"}[this.weather]; if(W) act(s,W); if(this.night0) act(s,"NIGHT");
+      const W={"雨":"W_RAIN","大风":"W_WIND","雾":"W_FOG","雪":"W_SNOW","酷暑":"W_HEAT"}[this.weather]; if(W) act(s,W); if(this.isNight) act(s,"NIGHT");
       const M={destroy:"M_RAID",hold:"M_HOLD",delay:"M_HOLD",escort:"M_ESCORT"}[s.mission.type]; if(M) act(s,M); }
     for(const s of sides){ s.sm.ranged*=s.fm.ranged||1; for(const k of ["atk","def","orgTaken","orgDealt","stam","charge"]) s.tm[k]*=s.sm[k]; }
 
@@ -811,7 +828,7 @@ class Battle{
     const gone=s=>!s.aliveFront().length&&!s.aliveColumn().length;
     const ad=gone(A), bd=gone(B);
     if(ad||bd){ this.winner=(ad&&bd)?null:(ad?B:A); this.endReason = this.mode==="围城"?(this.winner===A?"城破":"攻城失败溃退"):"溃败"; this.finish(); return; }
-    if(dr>=P.DAY_ROUNDS){ if(this.day<this.days) this.night(); else { this.winner=null; this.endReason="期满对峙"; this.dayReport(); this.finish(); } }
+    this.phR++; if(this.phR>=phRounds(this.ph)) this.nextPh();
   }
 
   /* 当日战况 */
@@ -831,10 +848,33 @@ class Battle{
       rep[s.name].failDays=s.failDays; }
     rep.stage=this.stage; this.daily.push(rep); return rep;
   }
-  /* 日暮收兵：夜议定次日方略 → 撤退/投降 → 救治、修整、筑垒、造械、存粮 → 重新列阵 */
-  night(){
+  /* ───── 时钟：一段打满即入下一段。傍晚终了议事（收兵或夜战续攻）；夜战至晓则略作休整 ───── */
+  nextPh(){ const from=this.ph; this.phR=0; this.clock++;
+    const last=this.day>=this.days;
+    if(from===4){ this.dusk(); return; }                                   // 傍晚终了：议事
+    if(from===this.endPh&&last){ this.winner=null; this.endReason=from===0?"夜战至晓，各自收兵":(from===1&&!this.hadDay?"天明收兵":"期满对峙"); this.dayReport(); this.finish(); return; }
+    if(from===0){ this.ph=1; if(this.hadDay) this.dawnAfterNight(); this.hadDay=true; this.nightFight=false; this.newDay=!this.done; return; }   // 天明
+    this.ph=(from+1)%PERIODS.length; }
+  /* 傍晚：日暮议定方略。有一方夜战续攻 → 不解甲转入前半夜；否则收兵过夜，次日清晨再战（或末日期满） */
+  dusk(){ const A=this.A,B=this.B, ev=this.events;
+    if(this.decide()) return;
+    const night=[A,B].some(s=>s.plan==="NIGHT");
+    if(night){ this.nightFight=true; this.ph=5; if(this.day>=this.days&&this.endPh===4) this.endPh=0;
+      const w=[A,B].filter(s=>s.plan==="NIGHT").map(s=>s.name==="A"?"甲":"乙").join("、");
+      ev.push({t:`暮色四合，${w}军不解甲，转为夜战`,s:"",big:true,night:true}); return; }
+    if(this.day>=this.days){ this.winner=null; this.endReason="期满对峙"; this.finish(); return; }
+    this.rest(); this.clock+=2; this.ph=1; this.newDay=true; }
+  /* 夜战至晓：不得安歇，只略收溃卒、稍复组织，耗粮一日 */
+  dawnAfterNight(){ const ev=this.events;
+    for(const s of [this.A,this.B]){ if(s.food!=null){ s.food-=1; if(s.food<0){ s.food=0; s.starving++; } }
+      for(const u of s.units){ if(u.routed){ if(!u.destroyed&&this.r()<P.NIGHT_RALLY*s.cmd/100*0.5){ u.routed=false; u.org=u.maxOrg*P.NIGHT_RALLY_ORG; } continue; }
+        u.org=Math.min(u.maxOrg,Math.max(0,u.org)+u.maxOrg*P.NIGHT_ORG*0.3); u.stamina=Math.min(100,u.stamina+P.NIGHT_STAM*0.3); }
+      if(s.plan==="NIGHT") s.plan="FIGHT"; }
+    this.day++; this.dayStart=this.rnd; ev.push({t:`夜战至晓，第${this.day}日`,s:"",night:true}); }
+  /* 日暮议事：定次日方略 → 奇袭粮道 → 撤退/投降/夜遁。结束战斗则返回 true */
+  decide(){
     const A=this.A,B=this.B, ev=this.events;
-    const rep=this.dayReport();
+    const rep=this.dayReport(); this.lastRep=rep;
     for(const s of [A,B]){ s.plan="FIGHT"; s.planReason=""; s.aiPlanned=false; s.lured=0; s.ambush=0; s.lureBlown=false; s.looting=0; s.baitSeen=false; }
     if(this.dayHook) this.dayHook(this);
     for(const k of ["A","B"]) rep[k].plan=this[k].plan;
@@ -847,13 +887,17 @@ class Battle{
       else if(cav){ const l=cav.men*P.RAID_LOSS; cav.men-=l; cav.dead+=l; cav.org=Math.min(cav.org,cav.maxOrg*0.3); en.raidsSeen=(en.raidsSeen||0)+1;
         ev.push({t:"劫粮之兵中伏，铩羽而归",s:s.name,big:true,night:true}); } }
     for(const s of [A,B]){
-      if(s.plan==="SURRENDER"){ this.winner=this.other(s); this.endReason="开城投降"; this.surrender=s; ev.push({t:`第${this.day}日夜，城中${s.food<=0?"粮尽":"力竭"}，开城投降`,s:s.name,big:true,night:true}); this.finish(); return; }
+      if(s.plan==="SURRENDER"){ this.winner=this.other(s); this.endReason="开城投降"; this.surrender=s; ev.push({t:`第${this.day}日夜，城中${s.food<=0?"粮尽":"力竭"}，开城投降`,s:s.name,big:true,night:true}); this.finish(); return true; }
       if(s.plan==="WITHDRAW"){ this.winner=this.other(s); this.nightRetreat=true; this.endReason=(this.mode==="围城"&&s===A)?"撤围":"撤退";
-        ev.push({t:`第${this.day}日夜，${s.name==="A"?"甲":"乙"}军${this.endReason==="撤围"?"解围而去":"拔营撤退"}：${s.planReason}`,s:s.name,big:true,night:true}); this.finish(); return; } }
+        ev.push({t:`第${this.day}日夜，${s.name==="A"?"甲":"乙"}军${this.endReason==="撤围"?"解围而去":"拔营撤退"}：${s.planReason}`,s:s.name,big:true,night:true}); this.finish(); return true; } }
     // 无战术AI的一方沿用旧规则：战力不足对方一半者乘夜遁走
     const pa=A.power(), pb=B.power();
     const flee = (!A.aiPlanned&&!A.wall&&pa<P.NIGHT_RETREAT_RATIO*pb) ? A : ((!B.aiPlanned&&!B.wall&&pb<P.NIGHT_RETREAT_RATIO*pa) ? B : null);
-    if(flee){ this.winner=this.other(flee); this.nightRetreat=true; this.endReason="夜遁"; ev.push({t:`第${this.day}日暮，${flee.name==="A"?"甲":"乙"}军自度不支，乘夜遁走`,s:flee.name,big:true,night:true}); this.finish(); return; }
+    if(flee){ this.winner=this.other(flee); this.nightRetreat=true; this.endReason="夜遁"; ev.push({t:`第${this.day}日暮，${flee.name==="A"?"甲":"乙"}军自度不支，乘夜遁走`,s:flee.name,big:true,night:true}); this.finish(); return true; }
+    return false; }
+  /* 收兵过夜：救治、修整、筑垒、造械、存粮 → 重新列阵 */
+  rest(){
+    const A=this.A,B=this.B, ev=this.events, rep=this.lastRep;
     const info={};
     for(const s of [A,B]){
       const c=s.cmd/100; let rallied=0; const rest=s.plan==="REST"; let healed=0;
@@ -886,7 +930,7 @@ class Battle{
     for(const s of [A,B]){ const en=this.other(s); if(s.lastPlan==="SORTIE"&&rep[s.name].exchange>1&&en.engines>0){ const es=en.engineUnits(); en.destroyEngine(es.reduce((m,x)=>x.hp<m.hp?x:m,es[0])); ev.push({t:"出城突击得手，焚毁敌攻城器械一具",s:s.name,big:true}); } s.lastPlan=s.plan; }
     for(const s of [A,B]){ const hadGeneral=s.generalAlive; s.generalAlive=true; if(this.formHook) this.formHook(this,s); s.applyFormationShape(); s.refresh(); s.column=[]; s.deploy(s.units.filter(u=>!u.routed)); info[s.name].hadGeneral=hadGeneral; }
     this.applyWallWidth();
-    if(this.stage==="野战"){ const quiet=rep.A.attack+rep.B.attack<P.DAY_ROUNDS*0.5; if(A.fort>=0.5||B.fort>=0.5||(quiet&&this.day>=1)){ this.stage="阵地战"; ev.push({t:"双方转入阵地相持，各自安营扎寨",s:"",night:true}); } }
+    if(this.stage==="野战"){ const quiet=rep.A.attack+rep.B.attack<dayRounds()*0.5; if(A.fort>=0.5||B.fort>=0.5||(quiet&&this.day>=1)){ this.stage="阵地战"; ev.push({t:"双方转入阵地相持，各自安营扎寨",s:"",night:true}); } }
     this.day++; this.dayStart=this.rnd; this.phase=this.bothAtk?1:(this.mode==="围城"?0:1);
     const pl=s=>this.planName(s.plan);
     ev.push({t:`日暮收兵。救回伤兵：甲 ${info.A.healed}、乙 ${info.B.healed}；收拢溃部：甲 ${info.A.rallied}、乙 ${info.B.rallied}。次日方略：甲${pl(A)}，乙${pl(B)}`,s:"",big:false,night:true});

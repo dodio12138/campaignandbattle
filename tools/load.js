@@ -3,7 +3,7 @@
 const fs = require("fs"), path = require("path"), vm = require("vm");
 const { engine } = require("./manifest");
 const ROOT = path.join(__dirname, "..");
-const EXPORTS = ["Battle","TacticalAI","attachRoundAI","Campaign","StrategicAI","CAMP_SCENARIOS","CP","UT","UNIT_ORDER","MISSION_NAME","T_PERSONA","P","STATUS","FORM"];
+const EXPORTS = ["PERIODS","Battle","TacticalAI","attachRoundAI","Campaign","StrategicAI","CAMP_SCENARIOS","CP","UT","UNIT_ORDER","MISSION_NAME","T_PERSONA","P","STATUS","FORM"];
 module.exports = function load(){
   const ctx = { console, Math, JSON, Date }; vm.createContext(ctx);
   const src = engine.map(f => fs.readFileSync(path.join(ROOT, f), "utf8")).join("\n;\n");
