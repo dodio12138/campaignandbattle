@@ -7,5 +7,5 @@ module.exports = {
     "src/engine/campaign.js",       // 战役层 + 战略 AI + 历史模式
     "src/data/scenarios.js",        // 内置剧本
   ],
-  ui: { head: "src/ui/head.html", styles: "src/ui/styles.css", body: "src/ui/body.html", main: "src/ui/main.js", map: "src/ui/map_svg.js", camp: "src/ui/camp_ui.js", rmap: "src/ui/report_map.js", lab: "src/ui/camp_lab.js", play: "src/ui/play.js", kit: "src/ui/kit.html" },
+  ui: { head: "src/ui/head.html", styles: "src/ui/styles.css", body: "src/ui/body.html", main: "src/ui/main.js", map: "src/ui/map_svg.js", camp: "src/ui/camp_ui.js", rmap: "src/ui/report_map.js", lab: "src/ui/camp_lab.js", cbatch: "src/ui/batch_camp.js", play: "src/ui/play.js", kit: "src/ui/kit.html" },
 };
