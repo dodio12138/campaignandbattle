@@ -301,17 +301,17 @@ button.cp-army:focus-visible{outline:2px solid var(--brass)}
 .cp-dep{display:grid;grid-template-columns:4.5em 1fr 3em;gap:6px;align-items:center;font-size:12px} .cp-dep .a{color:var(--ca);font-weight:700} .cp-dep .b{color:var(--cb);font-weight:700}
 .cp-log{max-height:none} .cp-log tr.big td,.cp-log tr.battle td{font-weight:700} .cp-log tr.bad td:last-child{color:var(--bad)} .cp-log tr.good td:last-child{color:var(--good,#3f6b2a)} .cp-log tr.day td{color:var(--ink-2)} .cp-log tr.order td:last-child{color:var(--brass)}
 .cp-legend .lg{display:inline-block;width:12px;height:12px;border:2px solid var(--ink);vertical-align:-2px;margin-right:3px} .cp-legend .lg.depot{border-radius:50%} .cp-legend .lg.camp{border-style:dashed} .cp-legend .lg.ford{transform:rotate(45deg);width:9px;height:9px}
-#cp-svg .cp-road{stroke:var(--ink-2);stroke-width:3;opacity:.55;stroke-dasharray:1 0} #cp-svg .cp-days{font:600 13px var(--f-mono);fill:var(--ink-2);text-anchor:middle;paint-order:stroke;stroke:var(--map);stroke-width:4}
-#cp-svg .cp-rl{font:14px var(--f-display);fill:var(--river,#6f9bb8)}
-#cp-svg .cp-path{fill:none;stroke-width:2.5;stroke-dasharray:7 5;opacity:.75} #cp-svg .cp-path.a{stroke:var(--ca);color:var(--ca)} #cp-svg .cp-path.b{stroke:var(--cb);color:var(--cb)} #cp-svg .cp-path.on{stroke-width:4;opacity:1}
-#cp-svg .cp-node{fill:var(--panel);stroke:var(--ink);stroke-width:2.5} #cp-svg .cp-node.a{stroke:var(--ca)} #cp-svg .cp-node.b{stroke:var(--cb)} #cp-svg .cp-node.camp{stroke-dasharray:5 3}
-#cp-svg .cp-node-in{fill:none;stroke:var(--ink);stroke-width:1.5} #cp-svg .cp-node-in.a{stroke:var(--ca)} #cp-svg .cp-node-in.b{stroke:var(--cb)}
-#cp-svg .cp-gl{font:700 15px var(--f-glyph,serif);text-anchor:middle;fill:var(--ink)}
-#cp-svg .cp-name{font:700 15px var(--f-body,serif);text-anchor:middle;fill:var(--ink);paint-order:stroke;stroke:var(--map);stroke-width:4}
-#cp-svg .cp-sub{font:11px var(--f-mono);text-anchor:middle;fill:var(--ink-2);paint-order:stroke;stroke:var(--map);stroke-width:3}
-#cp-svg .cp-dbar{fill:var(--panel-2);stroke:var(--rule)} #cp-svg .cp-dfill{fill:var(--brass)}
-#cp-svg .cp-n{cursor:pointer} #cp-svg .cp-n.pick .cp-node{stroke-width:4;filter:drop-shadow(0 0 3px var(--brass))} #cp-svg .cp-n:focus-visible .cp-node{stroke:var(--brass)}
-#cp-svg .cp-x{font-size:22px;fill:var(--bad)}
+.cmap .cp-road{stroke:var(--ink-2);stroke-width:3;opacity:.55;stroke-dasharray:1 0} .cmap .cp-days{font:600 13px var(--f-mono);fill:var(--ink-2);text-anchor:middle;paint-order:stroke;stroke:var(--map);stroke-width:4}
+.cmap .cp-rl{font:14px var(--f-display);fill:var(--river,#6f9bb8)}
+.cmap .cp-path{fill:none;stroke-width:2.5;stroke-dasharray:7 5;opacity:.75} .cmap .cp-path.a{stroke:var(--ca);color:var(--ca)} .cmap .cp-path.b{stroke:var(--cb);color:var(--cb)} .cmap .cp-path.on{stroke-width:4;opacity:1}
+.cmap .cp-node{fill:var(--panel);stroke:var(--ink);stroke-width:2.5} .cmap .cp-node.a{stroke:var(--ca)} .cmap .cp-node.b{stroke:var(--cb)} .cmap .cp-node.camp{stroke-dasharray:5 3}
+.cmap .cp-node-in{fill:none;stroke:var(--ink);stroke-width:1.5} .cmap .cp-node-in.a{stroke:var(--ca)} .cmap .cp-node-in.b{stroke:var(--cb)}
+.cmap .cp-gl{font:700 15px var(--f-glyph,serif);text-anchor:middle;fill:var(--ink)}
+.cmap .cp-name{font:700 15px var(--f-body,serif);text-anchor:middle;fill:var(--ink);paint-order:stroke;stroke:var(--map);stroke-width:4}
+.cmap .cp-sub{font:11px var(--f-mono);text-anchor:middle;fill:var(--ink-2);paint-order:stroke;stroke:var(--map);stroke-width:3}
+.cmap .cp-dbar{fill:var(--panel-2);stroke:var(--rule)} .cmap .cp-dfill{fill:var(--brass)}
+.cmap .cp-n{cursor:pointer} .cmap .cp-n.pick .cp-node{stroke-width:4;filter:drop-shadow(0 0 3px var(--brass))} .cmap .cp-n:focus-visible .cp-node{stroke:var(--brass)}
+.cmap .cp-x{font-size:22px;fill:var(--bad)}
 /* ===== 主帅 · 战役报告 ===== */
 :root{--chart-a:#b33d2c;--chart-b:#3d6bb0}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--chart-a:#c4493b;--chart-b:#3f69a3}}
@@ -522,29 +522,55 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
 /* 滚动条：细、墨线色 */
 *{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
 /* 战役道路：曲线，底下一道浅色路基，上面墨线 */
-#cp-svg .cp-road-bed{fill:none;stroke:var(--ink-2);stroke-width:8;opacity:.12;stroke-linecap:round}
-#cp-svg .cp-road{fill:none;stroke:var(--ink-2);stroke-width:2.5;opacity:.6;stroke-linecap:round;stroke-dasharray:none}
-#cp-svg .cp-path{stroke-linecap:round;stroke-linejoin:round}
+.cmap .cp-road-bed{fill:none;stroke:var(--ink-2);stroke-width:8;opacity:.12;stroke-linecap:round}
+.cmap .cp-road{fill:none;stroke:var(--ink-2);stroke-width:2.5;opacity:.6;stroke-linecap:round;stroke-dasharray:none}
+.cmap .cp-path{stroke-linecap:round;stroke-linejoin:round}
 .ed-road{fill:none;stroke-linecap:round}
 
 /* 战役地图 · 兵旗卡片：左为阵营色燕尾旗（主将姓），右为纸色卡（主将、部数、兵员条、组织条） */
-#cp-svg .cp-army{cursor:pointer;--sd:var(--ca)} #cp-svg .cp-army.b{--sd:var(--cb)}
-#cp-svg .ca-card{fill:var(--panel);stroke:var(--sd);stroke-width:1.5;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35))}
-#cp-svg .ca-flag{fill:var(--sd);stroke:rgba(0,0,0,.35);stroke-width:1}
-#cp-svg .ca-sur{font:900 17px var(--f-glyph);fill:#fff;text-anchor:middle}
-#cp-svg .ca-nm{font:700 12px var(--f-body);fill:var(--ink)}
-#cp-svg .ca-ct{font:600 10.5px var(--f-mono);fill:var(--ink-2);text-anchor:end}
-#cp-svg .ca-bar{fill:var(--panel-2);stroke:none} #cp-svg .ca-men{fill:var(--sd)} #cp-svg .ca-org{fill:var(--good)}
-#cp-svg .cp-army.shaken .ca-org{fill:var(--warn)} #cp-svg .cp-army.shaken .ca-card{stroke-dasharray:4 2}
-#cp-svg .ca-tag rect{fill:var(--panel);stroke:var(--brass);stroke-width:1} #cp-svg .ca-tag text{font:700 10px var(--f-body);fill:var(--brass);text-anchor:middle}
-#cp-svg .cp-army.on .ca-card{stroke:var(--brass);stroke-width:2.5;filter:drop-shadow(0 0 4px var(--brass))}
-#cp-svg .cp-army:hover .ca-card{fill:var(--panel-2)}
-#cp-svg .cp-army:focus-visible{outline:none} #cp-svg .cp-army:focus-visible .ca-card{stroke:var(--brass);stroke-width:2.5}
+.cmap .cp-army{cursor:pointer;--sd:var(--ca)} .cmap .cp-army.b{--sd:var(--cb)}
+.cmap .ca-card{fill:var(--panel);stroke:var(--sd);stroke-width:1.5;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35))}
+.cmap .ca-flag{fill:var(--sd);stroke:rgba(0,0,0,.35);stroke-width:1}
+.cmap .ca-sur{font:900 17px var(--f-glyph);fill:#fff;text-anchor:middle}
+.cmap .ca-nm{font:700 12px var(--f-body);fill:var(--ink)}
+.cmap .ca-ct{font:600 10.5px var(--f-mono);fill:var(--ink-2);text-anchor:end}
+.cmap .ca-bar{fill:var(--panel-2);stroke:none} .cmap .ca-men{fill:var(--sd)} .cmap .ca-org{fill:var(--good)}
+.cmap .cp-army.shaken .ca-org{fill:var(--warn)} .cmap .cp-army.shaken .ca-card{stroke-dasharray:4 2}
+.cmap .ca-tag rect{fill:var(--panel);stroke:var(--brass);stroke-width:1} .cmap .ca-tag text{font:700 10px var(--f-body);fill:var(--brass);text-anchor:middle}
+.cmap .cp-army.on .ca-card{stroke:var(--brass);stroke-width:2.5;filter:drop-shadow(0 0 4px var(--brass))}
+.cmap .cp-army:hover .ca-card{fill:var(--panel-2)}
+.cmap .cp-army:focus-visible{outline:none} .cmap .cp-army:focus-visible .ca-card{stroke:var(--brass);stroke-width:2.5}
 /* 进军箭头：最上层、不挡点击；半透明阵营色箭带 + 深色描边，选中军团的箭头加深 */
-#cp-svg .cp-arrows{pointer-events:none}
-#cp-svg .cp-march{fill:var(--ca);fill-opacity:.5;stroke:color-mix(in srgb,var(--ca) 70%,#000);stroke-width:1.2;stroke-linejoin:round}
-#cp-svg .cp-march.b{fill:var(--cb);stroke:color-mix(in srgb,var(--cb) 70%,#000)}
-#cp-svg .cp-march.on{fill-opacity:.85;stroke-width:1.8}
+.cmap .cp-arrows{pointer-events:none}
+.cmap .cp-march{fill:var(--ca);fill-opacity:.5;stroke:color-mix(in srgb,var(--ca) 70%,#000);stroke-width:1.2;stroke-linejoin:round}
+.cmap .cp-march.b{fill:var(--cb);stroke:color-mix(in srgb,var(--cb) 70%,#000)}
+.cmap .cp-march.on{fill-opacity:.85;stroke-width:1.8}
+
+/* 地图通用（.cmap：战役地图与报告地图） */
+.cmap{--ca:#a3352a;--cb:#2c4c78}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .cmap{--ca:#c4493b;--cb:#3f69a3}}
+:root[data-theme="dark"] .cmap{--ca:#c4493b;--cb:#3f69a3}
+.cmap .cm-paper{fill:var(--map)} .cmap .cm-river{fill:none;stroke:var(--river,#6f9bb8);stroke-width:9;opacity:.55;stroke-linecap:round}
+.cmap .cm-frame{fill:none;stroke:var(--ink);stroke-width:3} .cmap .cm-frame.thin{stroke-width:1}
+.cmap .cp-army.gone{opacity:.55} .cmap .cp-army.gone .ca-flag{fill:var(--ink-2)} .cmap .ca-x{stroke:var(--bad);stroke-width:2}
+.cmap .cp-plan{fill:none;stroke:var(--ca);stroke-width:1.6;stroke-dasharray:5 4;opacity:.9} .cmap .cp-plan.b{stroke:var(--cb)}
+.cmap .mk circle{fill:var(--panel);stroke:var(--ink);stroke-width:1.5} .cmap .mk text{font:700 12px var(--f-glyph);text-anchor:middle;fill:var(--ink)}
+.cmap .mk-battle circle{stroke:var(--bad);stroke-width:2} .cmap .mk-battle text{fill:var(--bad);font-size:13px}
+.cmap .mk-fire circle{fill:#c8481e;stroke:#7a1d14} .cmap .mk-fire text{fill:#fff4d6}
+.cmap .mk-collapse circle{fill:var(--panel-2);stroke:var(--ink-2);stroke-dasharray:3 2} .cmap .mk-collapse text{fill:var(--ink-2)}
+.cmap .mk-capture path{fill:var(--ca);stroke:var(--ink);stroke-width:1.2} .cmap .mk-capture.b path{fill:var(--cb)} .cmap .mk-capture text{fill:#fff;font-size:9px}
+.cmap .mk .mk-l{font:600 10.5px var(--f-mono);fill:var(--ink);paint-order:stroke;stroke:var(--map);stroke-width:3}
+.cmap .cm-lbl{font:700 12.5px var(--f-body);paint-order:stroke;stroke:var(--map);stroke-width:4;fill:var(--ca)} .cmap .cm-lbl.b{fill:var(--cb)}
+.cmap .cm-lbl .d{font:600 11px var(--f-mono)}
+.cmap .cm-box{fill:var(--panel);stroke:var(--ink);stroke-width:1.5}
+.cmap .cm-title{font:400 30px var(--f-display);fill:var(--ink)} .cmap .cm-sub{font:12px var(--f-body);fill:var(--ink-2)}
+.cmap .cm-leg{font:12px var(--f-body);fill:var(--ink)} .cmap .cm-n{font:700 14px var(--f-glyph);fill:var(--ink);text-anchor:middle}
+.cmap .cm-npath{fill:var(--ink)}
+/* 战役报告 · 地图 */
+.rmap{width:100%;height:auto;display:block;max-width:1100px;border:1px solid var(--rule);background:var(--map)}
+.rmap-bar{margin:8px 0 6px;max-width:1100px} .rmap-bar #rd-lbl{min-width:7em;text-align:right}
+.rd-log{max-height:220px;max-width:1100px;border:1px solid var(--rule);margin-top:6px}
+.cmap .cp-march.big{fill-opacity:.62;stroke-width:1.4}
 </style>
 </head>
 <body>

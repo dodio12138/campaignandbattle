@@ -37,6 +37,8 @@ src/
   ui/head.html  ui/body.html  ui/styles.css
   ui/main.js               战场、模式与页签切换、战斗编辑、批量推演、战术编辑、规则编辑
   ui/camp_ui.js            战役地图、战役编辑器、自动推演、战役报告与史书体
+  ui/map_svg.js            地图绘制（道路曲线、进军箭头、兵旗、标记），战役地图与报告共用
+  ui/report_map.js         战役报告：战役示意图、每日战况回放、导出 PNG
   ui/play.js               游玩模式：战役开局大厅、选战例大厅、战场军令（玩家下达战术）
   ui/kit.html              控件样板（构建为 dist/ui-kit.html）
 tools/

@@ -26,7 +26,7 @@ $("#v-camp").innerHTML=`<div class="camp-grid">
     <div id="cp-pending"></div>
     <div class="lbl" style="margin-top:4px">军团（点选后下达目标）</div><div id="cp-armies" class="cp-armies"></div>
     <div id="cp-orders"></div></div></section>
-  <section class="card cp-mapcard"><div class="cp-map" id="cp-map"><svg id="cp-svg" viewBox="0 0 1000 800" role="img" aria-label="战役地图"></svg></div>
+  <section class="card cp-mapcard"><div class="cp-map" id="cp-map"><svg id="cp-svg" class="cmap" viewBox="0 0 1000 800" role="img" aria-label="战役地图"></svg></div>
     <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>箭头：进军路线</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
   <div class="cp-report" id="cp-report" hidden></div>
   <section class="card cp-right"><h2>情报 <span class="lbl">军报</span></h2><div class="body"><div id="cp-info"></div><div class="lbl">战役日志（最新在上）</div><div class="log cp-log" id="cp-log"></div></div></section>
@@ -91,78 +91,19 @@ function renderCampInfo(){
     <div class="lbl" style="margin-top:6px">每日军粮消耗</div>${["A","B"].map(s=>`<div class="note">${c.sideName(s)}：${c.armies.filter(a=>a.side===s&&!a.gone).reduce((t,a)=>t+c.eat(a),0).toFixed(1)} / 日</div>`).join("")}
     <div class="lbl" style="margin-top:6px">胜负条件</div>${c.sc.victory.map(v=>`<div class="note">${c.sideName(v.side)}胜：${v.text}</div>`).join("")}`;
 }
-/* 道路曲线：每条路按两端据点 id 固定弯法（弧形或 S 形），地图、行军路线、军团棋子与编辑器共用 */
-function roadCurve(ia,a,ib,b){ const fw=ia<ib, p=fw?a:b, q=fw?b:a, key=fw?ia+"|"+ib:ib+"|"+ia;
-  let h=7; for(const ch of key) h=(h*31+ch.charCodeAt(0))>>>0;
-  const dx=q.x-p.x, dy=q.y-p.y, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
-  const k1=Math.min(46,L*(0.07+(h>>>4)%5*0.018))*(h&1?1:-1), k2=h&2?k1*0.55:-k1*0.75;   // 同向为弧，反向为 S
-  return {fw,p,q,c1:{x:p.x+dx/3+nx*k1,y:p.y+dy/3+ny*k1},c2:{x:p.x+dx*2/3+nx*k2,y:p.y+dy*2/3+ny*k2}}; }
-function bezAt(c,t){ const u=1-t, A=u*u*u, B=3*u*u*t, C=3*u*t*t, D=t*t*t;
-  return {x:A*c.p.x+B*c.c1.x+C*c.c2.x+D*c.q.x, y:A*c.p.y+B*c.c1.y+C*c.c2.y+D*c.q.y}; }
-const r1=v=>Math.round(v*10)/10;
-/* 从 a 走到 b 的一段 C 指令（不含起点 M） */
-function roadSeg(ia,a,ib,b){ const c=roadCurve(ia,a,ib,b), [c1,c2,e]=c.fw?[c.c1,c.c2,c.q]:[c.c2,c.c1,c.p]; return `C${r1(c1.x)} ${r1(c1.y)} ${r1(c2.x)} ${r1(c2.y)} ${r1(e.x)} ${r1(e.y)}`; }
-function roadD(ia,a,ib,b){ return `M${a.x} ${a.y} `+roadSeg(ia,a,ib,b); }
-/* 从 a 往 b 走了 t（0–1）时所在的点 */
-function roadAt(ia,a,ib,b,t){ const c=roadCurve(ia,a,ib,b); return bezAt(c,c.fw?t:1-t); }
-/* 进军箭头：沿道路曲线的实心箭带——燕尾起、渐宽、宽箭头收尖（经典作战地图画法） */
-function marchArrow(st,N){
-  const pts=[]; for(let i=1;i<st.length;i++) for(let k=i===1?0:1;k<=16;k++) pts.push(roadAt(st[i-1],N[st[i-1]],st[i],N[st[i]],k/16));
-  const cum=[0]; for(let i=1;i<pts.length;i++) cum.push(cum[i-1]+Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y));
-  const L=cum[cum.length-1]; if(L<30) return "";
-  const at=d=>{ let i=1; while(i<cum.length-1&&cum[i]<d) i++; const f=(d-cum[i-1])/((cum[i]-cum[i-1])||1), a=pts[i-1], b=pts[i];
-    const tx=b.x-a.x, ty=b.y-a.y, tl=Math.hypot(tx,ty)||1; return {x:a.x+tx*f, y:a.y+ty*f, tx:tx/tl, ty:ty/tl}; };
-  const s0=Math.min(20,L*0.18), e0=Math.min(20,L*0.15), hl=Math.min(30,L*0.3), body=L-e0-hl;
-  const w0=3, w1=6.5, wh=13, n=Math.max(4,Math.round((body-s0)/10)), Lp=[], Rp=[];
-  for(let i=0;i<=n;i++){ const d=s0+(body-s0)*i/n, p=at(d), w=w0+(w1-w0)*i/n; Lp.push([p.x-p.ty*w,p.y+p.tx*w]); Rp.push([p.x+p.ty*w,p.y-p.tx*w]); }
-  const hb=at(body), tip=at(L-e0), t0=at(s0);
-  const wingL=[hb.x-hb.ty*wh,hb.y+hb.tx*wh], wingR=[hb.x+hb.ty*wh,hb.y-hb.tx*wh], notch=[t0.x+t0.tx*5,t0.y+t0.ty*5];
-  const all=[...Lp,wingL,[tip.x,tip.y],wingR,...Rp.reverse(),notch];
-  return "M"+all.map(([x,y])=>r1(x)+" "+r1(y)).join("L")+"Z"; }
-/* 地图 */
+/* 地图（绘制函数见 map_svg.js） */
 function renderCampMap(){
-  const c=camp, N=c.nodes; const svg=$("#cp-svg"); let h="";
-  h+=`<defs><pattern id="cpg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="var(--map-line,rgba(0,0,0,.06))" stroke-width="1"/></pattern></defs>
-    <rect width="1000" height="800" fill="var(--map)"/><rect width="1000" height="800" fill="url(#cpg)"/>
-`;
-  const mp=c.sc.map||(Object.values(CAMP_SCENARIOS).find(s=>s.name===c.sc.name)||{}).map||{};
-  for(const r of mp.rivers||[]) h+=`<path d="${r.d}" fill="none" stroke="var(--river,#6f9bb8)" stroke-width="9" opacity=".55"/>${r.label?`<text x="${r.lx}" y="${r.ly}" class="cp-rl">${r.label}</text>`:""}`;
-  for(const e of c.edges){ const a=N[e.a], b=N[e.b], d=roadD(e.a,a,e.b,b), m=roadAt(e.a,a,e.b,b,0.5); h+=`<path d="${d}" class="cp-road-bed"/><path d="${d}" class="cp-road"/><text x="${r1(m.x)}" y="${r1(m.y-6)}" class="cp-days">${e.d}</text>`; }
-  // 计划路线：画在最上层（见末尾），这里只收集
+  const c=camp, N=c.nodes; let h=mapBaseSVG({sc:c.sc,nodes:N,edges:c.edges,interactive:true,pick:campPick});
+  for(const e of c.pending) if(!e.done){ const n=N[e.node]; h+=`<text x="${n.x+18}" y="${n.y-16}" class="cp-x">⚔</text>`; }
+  // 进军箭头：画在最上层（玩家扮演甲方时，不显示乙方未被选中的路线）
   let arrows="";
   for(const a of c.armies){ if(a.gone||!a.path.length) continue; if(c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B") continue;
     const d=marchArrow([a.at,...a.path],N); if(d) arrows+=`<path d="${d}" class="cp-march ${a.side.toLowerCase()} ${a.id===campSel?"on":""}"/>`; }
-  for(const n of Object.values(N)){ const own=n.owner?n.owner.toLowerCase():"n"; const sel=campPick?" pick":"";
-    let shape=""; if(n.type==="city") shape=`<rect x="-15" y="-15" width="30" height="30" class="cp-node ${own}"/><rect x="-9" y="-9" width="18" height="18" class="cp-node-in ${own}"/>`;
-    else if(n.type==="camp") shape=`<rect x="-14" y="-14" width="28" height="28" class="cp-node camp ${own}"/>`;
-    else if(n.type==="depot") shape=`<circle r="15" class="cp-node ${own}"/><text y="5" class="cp-gl">粮</text>`;
-    else if(n.type==="ford") shape=`<path d="M0 -13L13 0L0 13L-13 0z" class="cp-node ${own}"/>`;
-    else shape=`<circle r="6" class="cp-node ${own}"/>`;
-    const dep=n.depot?`<rect x="-20" y="20" width="40" height="5" class="cp-dbar"/><rect x="-20" y="20" width="${40*Math.min(1,n.depot.food/Math.max(1,n.depot.food0||1))}" height="5" class="cp-dfill"/>`:"";
-    const fortT=n.fort?` 垒${n.fort}`:(n.wall!=null?` 墙${Math.round(n.wall*100)}%`:"");
-    const cov=n.cover==="林"?`<g class="cp-tree" aria-hidden="true"><path d="M-27 -6l6 -11l6 11z"/><path d="M-22 2l6 -11l6 11z"/></g>`:"";
-    h+=`<g class="cp-n${sel}" data-node="${n.id}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${n.name}${n.cover==="林"?"（林木）":""}">${cov}${shape}${dep}<text y="${n.depot?40:30}" class="cp-name">${n.name}</text><text y="${n.depot?53:43}" class="cp-sub">${fortT}${n.depot?" 粮"+Math.round(n.depot.food):""}</text></g>`;
-    if(c.pending.some(e=>e.node===n.id&&!e.done)) h+=`<text x="${n.x+18}" y="${n.y-16}" class="cp-x">⚔</text>`; }
-  // 军团棋子
-  const stack={}; for(const a of c.armies){ if(a.gone) continue; let x,y; if(a.moving||(a.path.length&&a.prog>0)){ const nx=N[a.path[0]], fr=N[a.at], e=c.edge(a.at,a.path[0]); const f=Math.min(0.9,a.prog/e.d); ({x,y}=roadAt(a.at,fr,a.path[0],nx,f)); } else { x=N[a.at].x; y=N[a.at].y; }
-    const key=Math.round(x)+","+Math.round(y); const k=stack[key]=(stack[key]||0)+1; const W=88, H=30, dy=-40-(k-1)*(H+5), dx=a.side==="A"?-W-6:6;
-    const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), ratio=Math.max(0,Math.min(1,men/(a.men0||men||1)));
-    const org=cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0, shaken=a.shaken>0;
-    const tag={fire:"火攻",raid:"截粮",escort:"运粮",delay:"阻击",attack:"进攻",reinforce:"增援",retreat:"撤回"}[a.mission.type];
-    const sur=esc((a.gen.name||"?")[0]), nm=esc(a.gen.name), sd=a.side.toLowerCase();
-    h+=`<g class="cp-army ${sd} ${a.id===campSel?"on":""} ${shaken?"shaken":""} ${a.path.length?"moving":""}" data-army="${a.id}" transform="translate(${r1(x+dx)},${r1(y+dy)})" tabindex="0" role="button" aria-label="${esc(a.name)}：${cus.length} 部，约 ${(men/10000).toFixed(1)} 万${shaken?"，军心动摇":""}">
-      <title>${esc(a.name)} · ${cus.length} 部 · ${(men/10000).toFixed(1)} 万 · 组织 ${Math.round(org*100)}%${shaken?" · 军心动摇":""}</title>
-      <rect class="ca-card" x="0" y="0" width="${W}" height="${H}"/>
-      <path class="ca-flag" d="M0 0H26L22 ${H/2}L26 ${H}H0Z"/>
-      <text class="ca-sur" x="11.5" y="${H/2+6}">${sur}</text>
-      <text class="ca-nm" x="30" y="13">${nm}</text>
-      <text class="ca-ct" x="${W-4}" y="13">${cus.length}部${a.cargo>0?"·粮":""}</text>
-      <rect class="ca-bar" x="30" y="19" width="${W-34}" height="3"/><rect class="ca-men" x="30" y="19" width="${r1((W-34)*ratio)}" height="3"/>
-      <rect class="ca-bar" x="30" y="24" width="${W-34}" height="2"/><rect class="ca-org" x="30" y="24" width="${r1((W-34)*Math.min(1,org))}" height="2"/>
-      ${tag?`<g class="ca-tag" transform="translate(${a.side==="A"?-31:W+3},${(H-13)/2})"><rect width="28" height="13"/><text x="14" y="10">${tag}</text></g>`:""}
-    </g>`; }
-  h+=`<g class="cp-arrows" aria-hidden="true">${arrows}</g>`;
-  svg.innerHTML=h;
+  const flags=c.armies.filter(a=>!a.gone).map(a=>{ const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), p=armyXY(N,a.at,a.path[0],a.prog,a.path[0]?c.edge(a.at,a.path[0]).d:1);
+    return {...p,side:a.side,gen:a.gen.name,name:a.name,id:a.id,n:cus.length,men,ratio:men/(a.men0||men||1),org:cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0,
+      shaken:a.shaken>0,tag:MISSION_TAG[a.mission.type],cargo:a.cargo>0,on:a.id===campSel}; });
+  h+=flagsSVG(flags,{interactive:true})+`<g class="cp-arrows" aria-hidden="true">${arrows}</g>`;
+  $("#cp-svg").innerHTML=h;
 }
 /* 交互 */
 $("#v-camp").addEventListener("click",e=>{
@@ -527,11 +468,12 @@ function buildReport(c){
     return `<tr><td class="${a.side.toLowerCase()}">${nm(a.side)}</td><th>${a.name}</th><td>${a.gen.cmd}/${a.gen.int}</td><td>${bs.length}</td><td>${Math.round(a.men0||0)}</td><td>${Math.round(now)}</td><td>${a.gone?"溃散":MISSION_NAME[a.mission.type]+"·"+c.nodes[a.at].name}</td><td>${ok?`焚粮得手 ${ok}`:""}</td></tr>`; }).join("");
   const charts=[lineChart("rc-men",S.map(s=>({name:nm(s),side:s,values:c.stats.map(d=>[d.day,d.men[s]])})),{title:"双方兵员（逐日）",fmt:v=>(v/10000).toFixed(1)+"万"}),
     lineChart("rc-food",Object.values(c.nodes).filter(n=>n.depot).map((n,i)=>({name:n.name,side:(c.sc.nodes[n.id].owner||n.owner||"A"),dash:i%2?"5 4":"",values:c.stats.map(d=>[d.day,d.depots[n.id]??0])})),{title:"各粮仓存粮（逐日）",fmt:v=>Math.round(v)})];
-  const chron=chronicle(c);
+  const chron=chronicle(c), maps=reportMapsHTML(c);
   const tile=(v,l)=>`<div class="rtile"><b>${v}</b><span>${l}</span></div>`;
   const html=`<div class="rhead"><h2>战役报告 · ${c.name}</h2><div class="controls" style="padding:0;gap:6px"><button class="btn" id="rp-copy">复制报告文本</button><button class="btn" id="cp-replay" title="用本局的随机种子与设置重演：结果完全相同（除非你改变了指挥）">同种子重演</button><button class="btn" id="cp-restart" title="同一剧本、同一设置重新开一局">再开一局</button><button class="btn primary" id="rp-close">返回地图</button></div></div>
     <p class="rres"><b>${res}</b></p><p>${summary}</p>
-    <div class="rtabs" role="tablist"><button class="btn on" data-rt="data" role="tab">战报</button><button class="btn" data-rt="chron" role="tab">史书体</button></div>
+    <div class="rtabs" role="tablist"><button class="btn on" data-rt="data" role="tab">战报</button><button class="btn" data-rt="map" role="tab">战役示意图</button><button class="btn" data-rt="daily" role="tab">每日战况</button><button class="btn" data-rt="chron" role="tab">史书体</button></div>
+    <div class="rpane" data-pane="map" hidden>${maps.map}</div><div class="rpane" data-pane="daily" hidden>${maps.daily}</div>
     <div class="rpane" data-pane="chron" hidden><h3>${c.name} · 纪事</h3>${chron.html}${fidelityHTML(c)}</div><div class="rpane" data-pane="data">
     <div class="rtiles">${tile(c.day+" 日","历时")}${tile(c.battles.length,"会战")}${S.map(s=>tile(Math.round((1-last.men[s]/Math.max(1,men0[s]))*100)+"%",nm(s)+"兵员损失")).join("")}${S.map(s=>tile(Math.round(burntBy(s)),nm(s)+"焚敌粮仓")).join("")}${S.map(s=>tile(Math.round(c.events.filter(e=>e.type==="convoy"&&e.side!==s).reduce((t,e)=>t+e.amount,0)),nm(s)+"截敌运粮")).join("")}${S.map(s=>tile(starveDays(s),nm(s)+"断粮军日")).join("")}</div>
     <h3>两军主帅</h3>${S.map(s=>`<p class="rlord ${s.toLowerCase()}">${styleText(s)}</p>`).join("")}
@@ -541,11 +483,11 @@ function buildReport(c){
     <h3>军团表现</h3><div class="tbl-wrap"><table class="rtab"><thead><tr><th>方</th><th>军团</th><th>统/智</th><th>参战</th><th>初兵</th><th>今兵</th><th>终况</th><th>战绩</th></tr></thead><tbody>${armRows}</tbody></table></div>
     <h3>战略决策年表</h3><div class="tbl-wrap"><table class="rtab"><thead><tr><th>日</th><th>主帅</th><th>决策</th><th>缘由</th></tr></thead><tbody>${c.decisions.map(d=>`<tr><td>${d.day}</td><td class="${d.side.toLowerCase()}">${d.lord}</td><td>${DK[d.kind]?`<span class="rk">${DK[d.kind]}</span> `:""}${d.text}</td><td class="note">${d.why}</td></tr>`).join("")||'<tr><td colspan="4" class="note">尚无（玩家下达的命令见战役日志）</td></tr>'}</tbody></table></div></div>`;
   const text=[`战役报告 · ${c.name}`,res,summary,"","两军主帅：",...S.map(styleText),"","转折点：",...tp.map(x=>`第${x.day}日 ${x.t}`),"","会战一览：",...c.battles.map(b=>`第${b.day}日 ${b.desc}`),"","战略决策：",...c.decisions.map(d=>`第${d.day}日【${d.lord}】${d.text}——${d.why}`),"","—— 史书体 ——",chron.text,...(c.hist&&c.hist.outcomes&&c.hist.outcomes.length?["",`史实吻合度 ${Math.round(c.fidelity().score*100)}%：`+c.fidelity().list.map(o=>(o.ok?"✓":"✗")+o.text).join(" ")]:[])].join("\n");
-  return {html,text,charts};
+  return {html,text,charts,maps};
 }
 function openReport(){ const el=$("#cp-report"); const r=buildReport(camp); el.innerHTML=r.html; el.hidden=false; r.charts.forEach(x=>x.bind()); el.scrollTop=0;
   $("#rp-close").onclick=()=>{ el.hidden=true; };
-  el.querySelectorAll("[data-rt]").forEach(b=>b.onclick=()=>{ el.querySelectorAll("[data-rt]").forEach(x=>x.classList.toggle("on",x===b)); el.querySelectorAll("[data-pane]").forEach(p=>p.hidden=p.dataset.pane!==b.dataset.rt); if(b.dataset.rt==="data") r.charts.forEach(x=>x.bind()); });
+  el.querySelectorAll("[data-rt]").forEach(b=>b.onclick=()=>{ el.querySelectorAll("[data-rt]").forEach(x=>x.classList.toggle("on",x===b)); el.querySelectorAll("[data-pane]").forEach(p=>p.hidden=p.dataset.pane!==b.dataset.rt); if(b.dataset.rt==="data") r.charts.forEach(x=>x.bind()); if(b.dataset.rt==="map"||b.dataset.rt==="daily") r.maps.bind(el); });
   if(camp.hist&&camp.hist.on) el.querySelector('[data-rt="chron"]').click(); $("#rp-copy").onclick=async()=>{ try{ await navigator.clipboard.writeText(r.text); $("#rp-copy").textContent="已复制"; }catch(e){ $("#rp-copy").textContent="复制失败"; } }; }
 
 window.renderCamp=renderCamp;

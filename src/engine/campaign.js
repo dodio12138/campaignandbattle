@@ -210,6 +210,10 @@ class Campaign{
   sideMen(s){ return this.armies.filter(a=>a.side===s&&!a.gone).reduce((t,a)=>t+this.combatUnits(a).reduce((q,u)=>q+u.men,0),0); }
   snapshot(){ const d={day:this.day,men:{A:this.sideMen("A"),B:this.sideMen("B")},power:{A:0,B:0},depots:{},weather:this.weather};
     for(const a of this.armies) if(!a.gone) d.power[a.side]+=this.power(a); for(const n of Object.values(this.nodes)) if(n.depot) d.depots[n.id]=Math.round(n.depot.food*10)/10;
+    // 逐日态势：军团位置与据点归属（战役报告的每日战况图用；旧存档没有这两项）
+    d.armies=this.armies.map(a=>{ const cu=this.combatUnits(a); return {id:a.id,side:a.side,at:a.at,nx:a.path[0]||null,prog:Math.round((a.prog||0)*100)/100,path:a.path.slice(),
+      men:Math.round(cu.reduce((t,u)=>t+u.men,0)),org:cu.length?Math.round(cu.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cu.length*100)/100:0,n:cu.length,gone:!!a.gone,mt:a.mission.type,sh:a.shaken>0?1:0}; });
+    d.owners={}; for(const n of Object.values(this.nodes)) d.owners[n.id]=n.owner||null;
     const i=this.stats.findIndex(x=>x.day===this.day); if(i>=0) this.stats[i]=d; else this.stats.push(d); }
   decision(side,text,why,kind=""){ this.decisions.push({day:this.day,side,lord:this.sideInfo[side].lord?this.sideInfo[side].lord.name:"",text,why,kind}); this.note(`【${this.sideInfo[side].lord?this.sideInfo[side].lord.name:this.sideName(side)}】${text}——${why}`,kind==="hesitate"?"":"ai"); }
   rand(){ let t=(this.rs+=0x6D2B79F5)|0; t=Math.imul(t^(t>>>15),1|t); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }

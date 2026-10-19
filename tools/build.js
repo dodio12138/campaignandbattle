@@ -12,7 +12,9 @@ const inner = [
   rd(ui.body).trim(),
   `<script id="engine">\n${eng}\n</script>`,
   `<script>\n${rd(ui.main)}</script>`,
+  `<script id="map-svg">\n${rd(ui.map)}</script>`,
   `<script id="camp-ui">\n${rd(ui.camp)}</script>`,
+  `<script id="report-map">\n${rd(ui.rmap)}</script>`,
   `<script id="play-ui">\n${rd(ui.play)}</script>`,
 ].join("\n");
 fs.mkdirSync(path.join(ROOT, "dist"), { recursive: true });
