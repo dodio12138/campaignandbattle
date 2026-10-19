@@ -619,6 +619,22 @@ body.vw #b-back,body.vw #b-side{display:none}
 @media (min-width:1100px) and (min-height:620px){ #v-campedit.on .wb{flex:1;min-height:0;align-items:stretch} #v-campedit.on{overflow:hidden!important} .wb-camp .wb-main{display:flex;flex-direction:column;min-height:0} .wb-camp .sb-card{flex:1} }
 @media (max-width:1200px){.wb-camp{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 @media (max-width:900px){.wb-camp{grid-template-columns:minmax(0,1fr)}}
+/* 回顾：会战图标可点，战果卡 */
+.cmap .mk-click{cursor:pointer} .cmap .mk-click:hover circle,.cmap .mk-click:focus-visible circle{stroke:var(--brass);stroke-width:3} .cmap .mk-click:focus-visible{outline:none}
+.rtab tr.bt-row{cursor:pointer} .rtab tr.bt-row:hover td,.rtab tr.bt-row:focus-visible td{background:var(--panel-2)} .rtab tr.bt-row:focus-visible{outline:2px solid var(--brass)}
+#bt-pop{position:fixed;z-index:30;background:var(--panel);border:2px solid var(--ink);box-shadow:0 10px 30px rgba(0,0,0,.28);max-height:70vh;display:flex;flex-direction:column}
+#bt-pop .bt-pop-h{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-bottom:1px solid var(--rule)}
+#bt-pop .bt-pop-b{overflow:auto;padding:8px;display:grid;gap:10px}
+.bt-card{display:grid;gap:6px;font-size:12.5px} .bt-card+.bt-card{border-top:1px dotted var(--rule);padding-top:10px}
+.bt-h{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline} .bt-h b{font-family:var(--f-display);font-weight:400;font-size:20px}
+.bt-res{font-weight:700;border-left:4px solid var(--ink-2);padding:1px 8px;background:var(--panel-2)} .bt-res.a{border-color:var(--a);color:var(--a)} .bt-res.b{border-color:var(--b);color:var(--b)}
+/* 界面文字不可选：凡是拿来点、拖的（按钮、页签、标签、列表项、时段条、地图、战场、兵牌、图例、卡片标题）——免得点按时选中一片字。
+   战报、日志、说明、史书体纪事与输入框仍可选，便于复制 */
+header.top,nav,button,.btn,.seg,.pick,.ph-bar,.lbl,.chip,.stage-pill,.day-pill,.phase-pill,.histbadge,.legend,.cmap,.map,.field,.ctr,.mini,
+.flags,.pen,.kbd-hint,.card>h2,.vs,.tlist,.rtabs,.form-chips,summary,.chk,.cp-army,.ev,.wallbar,.palisade,.rout-tray,.zone-lbl,.ed-map,.ph-bar span,.bt-pop-h{
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text}
+svg,img{-webkit-user-drag:none}
 </style>
 <header class="top">
   <h1>汉末会战沙盘</h1>
@@ -636,7 +652,7 @@ body.vw #b-back,body.vw #b-side{display:none}
     <button role="tab" aria-selected="false" data-mode="edit" data-view="v-batch" id="tab-batch" hidden>批量推演</button>
   </nav>
   <div class="sub" id="top-sub">选剧本开战役，或选战例打一场会战</div>
-  <span class="ver">v23 · 游玩 / 编辑器</span>
+  <span class="ver">v24 · 游玩 / 编辑器</span>
 </header>
 
 <div class="layout">
@@ -2711,6 +2727,8 @@ class Campaign{
     const n=this.nodes[e.node]; const r=bt.result(); const map={A:e.att,B:e.def};   // 战斗方 → 战役方
     const byCid={}; for(const a of this.armies) for(const u of a.units) byCid[u.cid]=u;
     const cargo0={}; for(const cs of ["A","B"]) for(const id of e.armies[cs]){ const a=this.army(id); if(a&&a.cargo>0) cargo0[id]=a.cargo; }
+    const menOf0=cs=>e.armies[cs].reduce((t,id)=>t+this.combatUnits(this.army(id)).reduce((q,u)=>q+u.men,0),0), men0={A:menOf0("A"),B:menOf0("B")};   // 战前兵员（报告回顾用）
+    const gens={}; for(const cs of ["A","B"]) gens[cs]=e.armies[cs].map(id=>this.army(id).gen.name);
     const pre={}; for(const cs of ["A","B"]) pre[cs]=e.armies[cs].reduce((t,id)=>t+this.power(this.army(id)),0);
     let depotLeft=0, depotHad=0, captured=0;
     for(const bs of ["A","B"]) for(const u of bt[bs].units){
@@ -2730,7 +2748,10 @@ class Campaign{
     const menOf=cs=>e.armies[cs].reduce((t,id)=>t+this.combatUnits(this.army(id)).reduce((q,u)=>q+u.men,0),0);
     this.battles.push({day:this.day,ph:e.ph??this.ph,met:!!e.met,node:e.node,place:n.name,mode:e.mode,night:e.night,weather:this.weather,att:e.att,def:e.def,armies:{A:e.armies.A.map(id=>this.army(id).name),B:e.armies.B.map(id=>this.army(id).name)},
       lossPct:{[e.att]:r.A.loss,[e.def]:r.B.loss},burnt:Math.max(r.A.burnt||0,r.B.burnt||0),depotBurn:depotHad>0?depotHad-depotLeft:0,winner:wC,reason:r.reason,raidOk:(r.A.missionDone==="success"&&r.A.mission==="destroy")?e.att:((r.B.missionDone==="success"&&r.B.mission==="destroy")?e.def:null),desc,
-      armyIds:{A:[...e.armies.A],B:[...e.armies.B]}});
+      armyIds:{A:[...e.armies.A],B:[...e.armies.B]},
+      // 回顾：战前战后兵员、各兵种损失、回合与时段、终局缘由
+      men:{A:[Math.round(men0.A),Math.round(menOf("A"))],B:[Math.round(men0.B),Math.round(menOf("B"))]},gens,rounds:bt.rnd,span,mode2:r.stage,
+      types:{[e.att]:r.A.types,[e.def]:r.B.types},withdrew:bt.retreatSide?map[bt.retreatSide.name]:null,pursuit:Math.round((bt.pursuit||0)*1000)/1000});
     for(const id of e.histLuck||[]){ const a=this.hist.anchors.find(x=>x.id===id), rec=this.battles[this.battles.length-1]; if(!a||this.histDone[id]) continue;   // 战运锚点：仅在战果合于史时记入史
       if(rec.winner===a.side||rec.raidOk===a.side||(a.side===e.att&&rec.burnt>0.3)||(a.side===e.def&&!rec.winner)){ this.histDone[id]="fired"; this.histFired.push({day:this.day,id,text:a.text,node:e.node}); this.note(`〔史〕${a.text}`,"hist"); } }
     e.histLuck=null;
@@ -4007,7 +4028,8 @@ function flagsSVG(list,o={}){ const stack={}; let h="";
 function marksSVG(marks,N){ const cnt={}; let h="";
   for(const m of marks){ const n=N[m.node]; if(!n) continue; const k=cnt[m.node]=(cnt[m.node]||0)+1, x=n.x+20+(k-1)*24, y=n.y+16, sd=(m.side||"").toLowerCase();
     const glyph={battle:"⚔",fire:"火",capture:"克",collapse:"溃"}[m.kind]||"·";
-    h+=`<g class="mk mk-${m.kind} ${sd}" transform="translate(${x},${y})"><title>${esc(m.title||"")}</title>${m.kind==="capture"?`<path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/>`:`<circle r="10"/>`}<text y="${m.kind==="capture"?-3:4.5}" x="${m.kind==="capture"?5.5:0}">${glyph}</text>${m.label?`<text class="mk-l" y="${k%2?22:34}">${esc(m.label)}</text>`:""}</g>`; }
+    const bi=m.bi&&m.bi.length?` data-bi="${m.bi.join(",")}" tabindex="0" role="button" aria-label="${esc((m.title||"").split("\n")[0])}：点开看战果"`:"";
+    h+=`<g class="mk mk-${m.kind} ${sd}${bi?" mk-click":""}"${bi} transform="translate(${x},${y})"><title>${esc(m.title||"")}</title>${m.kind==="capture"?`<path d="M-1 -11V10M-1 -11H12L9 -6L12 -1H-1"/>`:`<circle r="10"/>`}<text y="${m.kind==="capture"?-3:4.5}" x="${m.kind==="capture"?5.5:0}">${glyph}</text>${m.label?`<text class="mk-l" y="${k%2?22:34}">${esc(m.label)}</text>`:""}</g>`; }
   return h; }
 </script>
 <script id="camp-ui">
@@ -4510,7 +4532,7 @@ function buildReport(c){
     <h3>两军主帅</h3>${S.map(s=>`<p class="rlord ${s.toLowerCase()}">${styleText(s)}</p>`).join("")}
     <div class="rcharts">${charts.map(x=>x.html).join("")}</div>
     <h3>转折点</h3>${tp.length?`<ol class="rtp">${tp.map(x=>`<li><span class="mono">第 ${x.day} 日</span> ${x.t}</li>`).join("")}</ol>`:'<p class="note">尚无</p>'}
-    <h3>会战一览</h3><div class="tbl-wrap"><table class="rtab"><thead><tr><th>日</th><th>地点</th><th>形式</th><th>攻方</th><th>守方</th><th>结果</th><th>攻方损失</th><th>守方损失</th><th>焚辎重</th></tr></thead><tbody>${c.battles.map(b=>`<tr><td>${b.day}</td><td>${b.place}</td><td>${b.mode}${b.night?"·夜":""}${b.weather!=="晴"?"·"+b.weather:""}</td><td class="${b.att.toLowerCase()}">${b.armies[b.att].map(x=>x.split(" · ")[0]).join("、")}</td><td class="${b.def.toLowerCase()}">${b.armies[b.def].map(x=>x.split(" · ")[0]).join("、")}</td><td>${b.raidOk?nm(b.raidOk)+"焚粮得手":(b.winner?nm(b.winner)+"胜·"+b.reason:"相持")}</td><td>${Math.round(b.lossPct[b.att]*100)}%</td><td>${Math.round(b.lossPct[b.def]*100)}%</td><td>${b.burnt>0.01?Math.round(b.burnt*100)+"%":""}</td></tr>`).join("")||'<tr><td colspan="9" class="note">尚无会战</td></tr>'}</tbody></table></div>
+    <h3>会战一览 <span class="note">点任一行或地图上的 ⚔ 看战果</span></h3><div class="tbl-wrap"><table class="rtab"><thead><tr><th>日</th><th>地点</th><th>形式</th><th>攻方</th><th>守方</th><th>结果</th><th>攻方损失</th><th>守方损失</th><th>焚辎重</th></tr></thead><tbody>${c.battles.map((b,i)=>`<tr class="bt-row" data-bi="${i}" tabindex="0" title="点开看战果"><td>${b.day}</td><td>${b.place}</td><td>${b.mode}${b.night?"·夜":""}${b.weather!=="晴"?"·"+b.weather:""}</td><td class="${b.att.toLowerCase()}">${b.armies[b.att].map(x=>x.split(" · ")[0]).join("、")}</td><td class="${b.def.toLowerCase()}">${b.armies[b.def].map(x=>x.split(" · ")[0]).join("、")}</td><td>${b.raidOk?nm(b.raidOk)+"焚粮得手":(b.winner?nm(b.winner)+"胜·"+b.reason:"相持")}</td><td>${Math.round(b.lossPct[b.att]*100)}%</td><td>${Math.round(b.lossPct[b.def]*100)}%</td><td>${b.burnt>0.01?Math.round(b.burnt*100)+"%":""}</td></tr>`).join("")||'<tr><td colspan="9" class="note">尚无会战</td></tr>'}</tbody></table></div>
     <h3>军团表现</h3><div class="tbl-wrap"><table class="rtab"><thead><tr><th>方</th><th>军团</th><th>统/智</th><th>参战</th><th>初兵</th><th>今兵</th><th>终况</th><th>战绩</th></tr></thead><tbody>${armRows}</tbody></table></div>
     <h3>战略决策年表</h3><div class="tbl-wrap"><table class="rtab"><thead><tr><th>日</th><th>主帅</th><th>决策</th><th>缘由</th></tr></thead><tbody>${c.decisions.map(d=>`<tr><td>${d.day}</td><td class="${d.side.toLowerCase()}">${d.lord}</td><td>${DK[d.kind]?`<span class="rk">${DK[d.kind]}</span> `:""}${d.text}</td><td class="note">${d.why}</td></tr>`).join("")||'<tr><td colspan="4" class="note">尚无（玩家下达的命令见战役日志）</td></tr>'}</tbody></table></div></div>`;
   const text=[`战役报告 · ${c.name}`,res,summary,"","两军主帅：",...S.map(styleText),"","转折点：",...tp.map(x=>`第${x.day}日 ${x.t}`),"","会战一览：",...c.battles.map(b=>`第${b.day}日 ${b.desc}`),"","战略决策：",...c.decisions.map(d=>`第${d.day}日【${d.lord}】${d.text}——${d.why}`),"","—— 史书体 ——",chron.text,...(c.hist&&c.hist.outcomes&&c.hist.outcomes.length?["",`史实吻合度 ${Math.round(c.fidelity().score*100)}%：`+c.fidelity().list.map(o=>(o.ok?"✓":"✗")+o.text).join(" ")]:[])].join("\n");
@@ -4536,7 +4558,7 @@ function armyInfo(c,id){ return c.armies.find(a=>a.id===id)||{gen:{name:"?"},nam
 function dateText(c,day){ const dt=c.hist&&c.hist.startDate?c.dateOf(day):null; return dt?`${dt.y}${dt.mn}月${dt.d}`:""; }
 /* 某日的会战、焚粮、火攻、攻占、溃散 → 地图标记 */
 function dayMarks(c,day,withLabel,ph=null){ const out=[], L=d=>withLabel?"D"+d:"", inPh=x=>ph==null||x.ph==null||x.ph===ph;
-  for(const b of c.battles) if((day==null||b.day===day)&&inPh(b)) out.push({node:b.node,kind:"battle",label:L(b.day),title:`第 ${b.day} 日 ${b.desc||b.place}`});
+  c.battles.forEach((b,i)=>{ if((day==null||b.day===day)&&inPh(b)) out.push({node:b.node,kind:"battle",label:L(b.day),title:`第 ${b.day} 日 ${b.desc||b.place}`,bi:[i]}); });
   for(const e of c.events){ if(day!=null&&e.day!==day) continue; if(!inPh(e)) continue;
     if(e.type==="fire"&&e.f>0) out.push({node:e.node,kind:"fire",side:e.by,label:L(e.day),title:`第 ${e.day} 日 ${c.sideName(e.by)}火攻${c.nodes[e.node].name}`});
     else if(e.type==="depot"&&e.amount>=Math.max(5,e.before*0.15)) out.push({node:e.node,kind:"fire",side:e.side==="A"?"B":"A",label:L(e.day),title:`第 ${e.day} 日 ${c.nodes[e.node].name}粮仓被焚 ${Math.round(e.amount)}`});
@@ -4544,7 +4566,7 @@ function dayMarks(c,day,withLabel,ph=null){ const out=[], L=d=>withLabel?"D"+d:"
     else if(e.type==="collapse"){ const s=snapDays(c).find(x=>x.day===e.day), a=s&&s.armies.find(x=>x.id===e.army); if(a) out.push({node:a.at,kind:"collapse",side:e.side,label:L(e.day),title:`第 ${e.day} 日 ${armyInfo(c,e.army).name}断粮溃散`}); } }
   if(day!=null) return out;
   // 全程示意图：同一据点同一类标记合并为一个，标注日子（多则写首末日与次数）
-  const g={}; for(const m of out){ const k=m.node+"|"+m.kind+"|"+(m.side||""); (g[k]=g[k]||{...m,days:[],titles:[]}); g[k].days.push(+m.label.slice(1)); g[k].titles.push(m.title); }
+  const g={}; for(const m of out){ const k=m.node+"|"+m.kind+"|"+(m.side||""); (g[k]=g[k]||{...m,days:[],titles:[],bi:[]}); g[k].days.push(+m.label.slice(1)); g[k].titles.push(m.title); if(m.bi) g[k].bi.push(...m.bi); }
   return Object.values(g).map(m=>{ const d=[...new Set(m.days)].sort((x,y)=>x-y);
     return {...m,label:d.length<=2?d.map(x=>"D"+x).join("·"):`D${d[0]}–${d[d.length-1]} ×${m.days.length}`,title:m.titles.join("\n")}; }); }
 function snapFlags(c,s,prev){ const N=c.nodes; if(prev===undefined) prev=snapDays(c).find(x=>x.day===s.day-1)||null;
@@ -4672,6 +4694,31 @@ function downloadMapPNG(svg,name){
   img.src=url; }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-rmdl]"); if(!b) return; const svg=document.getElementById(b.dataset.rmdl); if(!svg) return;
   const day=b.dataset.rmdl==="rm-day"?"_"+($("#rd-lbl")?$("#rd-lbl").textContent.split(" /")[0].replace(/\s/g,""):""):"_示意图"; downloadMapPNG(svg,(camp?camp.name:"战役")+day); });
+
+/* ---------- 回顾：点会战图标（或会战一览中的一行）弹出战果卡 ---------- */
+function battleCardHTML(c,b){ const nm=s=>esc(c.sideName(s)), sides=[b.att,b.def], P0=b.ph!=null?PERIODS[b.ph]:null;
+  const when=`第 ${b.day} 日${P0?" · "+(b.span>1?`${P0.n}至${b.ph+b.span-1>=6?"次日":""}${PERIODS[(b.ph+b.span-1)%6].n}`:P0.n):""}`;
+  const res=b.raidOk?`${nm(b.raidOk)}奇袭得手（焚辎重 ${Math.round((b.burnt||0)*100)}%）`:b.winner?`${nm(b.winner)}胜 · ${esc(b.reason||"")}`:`相持 · ${esc(b.reason||"各自收兵")}`;
+  const side=s=>{ const m=b.men&&b.men[s], loss=b.lossPct&&b.lossPct[s], ty=b.types&&b.types[s];
+    const tl=ty?Object.entries(ty).filter(([,v])=>v>0.005).sort((x,y)=>y[1]-x[1]).map(([k,v])=>`${esc(k)} ${Math.round(v*100)}%`).join(" · "):"";
+    return `<div class="vs-side ${s.toLowerCase()}"><b>${nm(s)} · ${s===b.att?"攻":"守"}</b><span>${(b.armies[s]||[]).map(x=>esc(x.split(" · ")[0])).join("、")}</span>
+      ${m?`<span class="mono">${(m[0]/10000).toFixed(2)} 万 → ${(m[1]/10000).toFixed(2)} 万</span>`:""}<span class="note">损 ${Math.round((loss||0)*100)}%${b.withdrew===s?" · 撤出":""}${b.winner===s?" · 胜":""}</span>${tl?`<span class="note">${tl}</span>`:""}</div>`; };
+  return `<div class="bt-card"><div class="bt-h"><b>${esc(b.place)}之战</b><span class="note">${when} · ${esc(b.mode)}${b.night?" · 夜":""}${b.weather&&b.weather!=="晴"?" · "+esc(b.weather):""}</span></div>
+    <div class="bt-res ${(b.raidOk||b.winner||"").toLowerCase()}">${res}</div>
+    <div class="vs">${side(sides[0])}<span class="vs-x">對</span>${side(sides[1])}</div>
+    <dl class="kv">${b.rounds?`<dt>回合 · 时段</dt><dd>${b.rounds} · ${b.span||1}</dd>`:""}${b.burnt>0.01?`<dt>焚辎重</dt><dd>${Math.round(b.burnt*100)}%</dd>`:""}${b.pursuit?`<dt>追击损失系数</dt><dd>${Math.round(b.pursuit*100)}%</dd>`:""}</dl>
+    ${b.men?"":`<div class="note">此局为旧存档，只记了战报一行：${esc(b.desc||"")}</div>`}</div>`; }
+function openBattlePop(list,x,y){ let el=document.getElementById("bt-pop"); if(!el){ el=document.createElement("div"); el.id="bt-pop"; el.setAttribute("role","dialog"); document.body.appendChild(el); }
+  el.innerHTML=`<div class="bt-pop-h"><span class="lbl">战果 · ${list.length} 战</span><button type="button" class="btn sm" data-btclose aria-label="关闭">×</button></div><div class="bt-pop-b">${list.map(b=>battleCardHTML(camp,b)).join("")}</div>`;
+  el.hidden=false; const w=Math.min(380,innerWidth-24), h=el.offsetHeight; el.style.width=w+"px";
+  el.style.left=Math.max(12,Math.min(innerWidth-w-12,x+14))+"px"; el.style.top=Math.max(12,Math.min(innerHeight-Math.min(h,innerHeight*0.7)-12,y-20))+"px"; el.querySelector("[data-btclose]").focus(); }
+function closeBattlePop(){ const el=document.getElementById("bt-pop"); if(el) el.hidden=true; }
+document.addEventListener("click",e=>{ const t=e.target;
+  if(t.closest("[data-btclose]")){ closeBattlePop(); return; }
+  const m=t.closest("[data-bi]"); if(m&&camp){ const list=m.dataset.bi.split(",").map(Number).map(i=>camp.battles[i]).filter(Boolean); if(list.length){ e.stopPropagation(); openBattlePop(list,e.clientX,e.clientY); } return; }
+  if(!t.closest("#bt-pop")) closeBattlePop(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeBattlePop();
+  if((e.key==="Enter"||e.key===" ")&&e.target.closest&&e.target.closest("[data-bi]")){ e.preventDefault(); const r=e.target.getBoundingClientRect(); e.target.dispatchEvent(new MouseEvent("click",{bubbles:true,clientX:r.right,clientY:r.top})); } });
 </script>
 <script id="camp-lab">
 /* ================= 编辑器 · 战役沙盘：按当前剧本重建一局 AI 对 AI，逐时段推进、点选军团或据点直接改状态、快速批量 =================
