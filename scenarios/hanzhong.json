@@ -1,0 +1,665 @@
+{
+ "name": "汉中之战（建安二十四年春）",
+ "season": "春",
+ "sides": {
+  "A": {
+   "name": "蜀军",
+   "short": "蜀",
+   "lord": {
+    "name": "刘备",
+    "cmd": 86,
+    "int": 84,
+    "persona": "诡诈"
+   }
+  },
+  "B": {
+   "name": "魏军",
+   "short": "魏",
+   "lord": {
+    "name": "夏侯渊",
+    "cmd": 82,
+    "int": 50,
+    "persona": "进取"
+   }
+  }
+ },
+ "calendar": {
+  "startDate": {
+   "year": "建安二十四年",
+   "month": 1,
+   "day": 1
+  },
+  "dayScale": 3
+ },
+ "dynamicSeason": false,
+ "map": {
+  "rivers": [
+   {
+    "d": "M0 470 C120 440 230 470 340 448 S520 400 620 430 S820 470 1000 420",
+    "label": "沔水",
+    "lx": 640,
+    "ly": 410
+   }
+  ]
+ },
+ "desc": "先主自阳平南渡沔水，缘山稍前，于定军山势作营。夏侯渊、张郃屯走马谷，立围鹿角，与先主相拒。法正为谋主。蜀军粮自葭萌关逾山而来；魏军粮在南郑，曹公将自长安出斜谷来援。",
+ "nodes": {
+  "jiameng": {
+   "name": "葭萌关",
+   "x": 90,
+   "y": 640,
+   "type": "city",
+   "terrain": "隘口",
+   "wall": 0.9,
+   "owner": "A",
+   "depot": {
+    "food": 120
+   }
+  },
+  "yangping": {
+   "name": "阳平关",
+   "x": 250,
+   "y": 330,
+   "type": "camp",
+   "terrain": "隘口",
+   "fort": 2,
+   "owner": "B",
+   "depot": {
+    "food": 25
+   }
+  },
+  "dingjun": {
+   "name": "定军山·蜀营",
+   "x": 420,
+   "y": 560,
+   "type": "camp",
+   "terrain": "丘陵",
+   "cover": "林",
+   "fort": 2,
+   "owner": "A",
+   "depot": {
+    "food": 25
+   }
+  },
+  "zoumagu": {
+   "name": "走马谷·鹿角",
+   "x": 570,
+   "y": 520,
+   "type": "camp",
+   "terrain": "丘陵",
+   "cover": "林",
+   "fort": 2,
+   "owner": "B"
+  },
+  "dongwei": {
+   "name": "东围",
+   "x": 640,
+   "y": 640,
+   "type": "camp",
+   "terrain": "丘陵",
+   "fort": 1,
+   "owner": "B"
+  },
+  "nanzheng": {
+   "name": "南郑",
+   "x": 760,
+   "y": 360,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 0.8,
+   "owner": "B",
+   "depot": {
+    "food": 90
+   }
+  },
+  "xiegu": {
+   "name": "斜谷口",
+   "x": 800,
+   "y": 160,
+   "type": "road",
+   "terrain": "隘口",
+   "owner": null
+  },
+  "changan": {
+   "name": "长安",
+   "x": 950,
+   "y": 50,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 1,
+   "owner": "B",
+   "depot": {
+    "food": 150
+   }
+  }
+ },
+ "edges": [
+  [
+   "jiameng",
+   "yangping",
+   3
+  ],
+  [
+   "jiameng",
+   "dingjun",
+   3
+  ],
+  [
+   "yangping",
+   "dingjun",
+   2
+  ],
+  [
+   "yangping",
+   "nanzheng",
+   3
+  ],
+  [
+   "dingjun",
+   "zoumagu",
+   1
+  ],
+  [
+   "zoumagu",
+   "dongwei",
+   1
+  ],
+  [
+   "dingjun",
+   "dongwei",
+   2
+  ],
+  [
+   "zoumagu",
+   "nanzheng",
+   2
+  ],
+  [
+   "dongwei",
+   "nanzheng",
+   3
+  ],
+  [
+   "nanzheng",
+   "xiegu",
+   2
+  ],
+  [
+   "xiegu",
+   "changan",
+   3
+  ]
+ ],
+ "armies": [
+  {
+   "id": "S1",
+   "side": "A",
+   "name": "刘备 · 中军",
+   "retreatHome": "jiameng",
+   "gen": {
+    "name": "刘备",
+    "cmd": 86,
+    "int": 84,
+    "persona": "诡诈",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "dingjun",
+   "home": "dingjun",
+   "ai": "main",
+   "planTarget": "zoumagu",
+   "roster": {
+    "刀盾兵": 5,
+    "长枪兵": 3,
+    "弓兵": 3,
+    "强弩兵": 2,
+    "轻骑": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.55
+   },
+   "food": 5
+  },
+  {
+   "id": "S2",
+   "side": "A",
+   "name": "黄忠 · 先登",
+   "gen": {
+    "name": "黄忠",
+    "cmd": 85,
+    "int": 62,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FENGSHI"
+   },
+   "at": "dingjun",
+   "home": "dingjun",
+   "ai": "raider",
+   "roster": {
+    "刀盾兵": 3,
+    "长枪兵": 1,
+    "弓兵": 1,
+    "轻骑": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "S3",
+   "side": "A",
+   "name": "赵云 · 游军",
+   "gen": {
+    "name": "赵云",
+    "cmd": 88,
+    "int": 78,
+    "persona": "谨慎",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "dingjun",
+   "home": "dingjun",
+   "ai": "reserve",
+   "roster": {
+    "轻骑": 2,
+    "刀盾兵": 2,
+    "长枪兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "S4",
+   "side": "A",
+   "name": "运粮队",
+   "gen": {
+    "name": "运粮",
+    "cmd": 55,
+    "int": 45,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "jiameng",
+   "home": "jiameng",
+   "ai": "convoy",
+   "convoyTo": "dingjun",
+   "roster": {
+    "刀盾兵": 1,
+    "辎重": 3
+   },
+   "mission": {
+    "type": "escort",
+    "target": "dingjun",
+    "retreatAt": 0.4
+   },
+   "food": 5,
+   "cargo": 25
+  },
+  {
+   "id": "S5",
+   "side": "A",
+   "name": "葭萌 · 留守",
+   "gen": {
+    "name": "霍峻",
+    "cmd": 72,
+    "int": 65,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "YUAN"
+   },
+   "at": "jiameng",
+   "home": "jiameng",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 2,
+    "弓兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "C1",
+   "side": "B",
+   "name": "夏侯渊 · 南围",
+   "retreatHome": "nanzheng",
+   "gen": {
+    "name": "夏侯渊",
+    "cmd": 82,
+    "int": 50,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "zoumagu",
+   "home": "zoumagu",
+   "ai": "main",
+   "planTarget": "dingjun",
+   "roster": {
+    "刀盾兵": 5,
+    "长枪兵": 3,
+    "弓兵": 3,
+    "轻骑": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.55
+   },
+   "food": 5
+  },
+  {
+   "id": "C2",
+   "side": "B",
+   "name": "张郃 · 东围",
+   "gen": {
+    "name": "张郃",
+    "cmd": 86,
+    "int": 76,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "dongwei",
+   "home": "dongwei",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 3,
+    "长枪兵": 2,
+    "轻骑": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "C3",
+   "side": "B",
+   "name": "阳平关 · 守军",
+   "gen": {
+    "name": "杜袭",
+    "cmd": 68,
+    "int": 70,
+    "persona": "谨慎",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "yangping",
+   "home": "yangping",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 2,
+    "弓兵": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "C4",
+   "side": "B",
+   "name": "曹操 · 援军",
+   "gen": {
+    "name": "曹操",
+    "cmd": 93,
+    "int": 92,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "changan",
+   "home": "changan",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 6,
+    "长枪兵": 3,
+    "弓兵": 3,
+    "轻骑": 2,
+    "重骑": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.5
+   },
+   "food": 5
+  },
+  {
+   "id": "C5",
+   "side": "B",
+   "name": "南郑 · 留守",
+   "gen": {
+    "name": "郭淮",
+    "cmd": 74,
+    "int": 72,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "nanzheng",
+   "home": "nanzheng",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 2,
+    "弓兵": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  }
+ ],
+ "maxDays": 45,
+ "history": {
+  "anchors": [
+   {
+    "id": "standoff",
+    "type": "posture",
+    "side": "B",
+    "until": 10,
+    "assaultMul": 0.3,
+    "text": "渊将兵来争其地，与先主相拒"
+   },
+   {
+    "id": "wait",
+    "type": "posture",
+    "side": "A",
+    "until": 9,
+    "noRaid": true,
+    "assaultMul": 0.2,
+    "text": "先主自阳平南渡沔水，缘山稍前，于定军山势作营"
+   },
+   {
+    "id": "fazheng",
+    "type": "intel",
+    "side": "A",
+    "day": 9,
+    "bonus": 1.3,
+    "text": "法正曰：可击矣"
+   },
+   {
+    "id": "fire",
+    "type": "order",
+    "side": "A",
+    "day": 10,
+    "army": "S2",
+    "mission": "fire",
+    "target": "zoumagu",
+    "retreatAt": 0.4,
+    "holdOthers": {
+     "S1": "dingjun"
+    },
+    "lock": 2,
+    "text": "备夜烧围鹿角。渊使张郃护东围，自将轻兵护南围"
+   },
+   {
+    "id": "luck",
+    "type": "luck",
+    "side": "A",
+    "node": "zoumagu",
+    "day": 10,
+    "value": 1.5,
+    "text": "忠推锋必进，劝率士卒，金鼓振天，欢声动谷，一战斩渊"
+   },
+   {
+    "id": "yuan",
+    "type": "morale",
+    "side": "B",
+    "trigger": "fire:zoumagu",
+    "org": 0.25,
+    "desert": 0.06,
+    "text": "渊遂战死，军中大扰"
+   },
+   {
+    "id": "he_back",
+    "type": "order",
+    "side": "B",
+    "army": "C2",
+    "mission": "retreat",
+    "target": "nanzheng",
+    "trigger": "fire:zoumagu",
+    "text": "张郃收余众，还屯阳平"
+   },
+   {
+    "id": "yuan_back",
+    "type": "order",
+    "side": "B",
+    "army": "C1",
+    "mission": "retreat",
+    "target": "nanzheng",
+    "trigger": "fire:zoumagu",
+    "text": "郭淮收散卒，推张郃为军主"
+   },
+   {
+    "id": "cao",
+    "type": "order",
+    "side": "B",
+    "day": 16,
+    "army": "C4",
+    "mission": "reinforce",
+    "target": "nanzheng",
+    "text": "曹公自长安举众，出斜谷，军遮要以临汉中"
+   },
+   {
+    "id": "cao_hold",
+    "type": "posture",
+    "side": "B",
+    "day": 16,
+    "until": 34,
+    "assaultMul": 0.2,
+    "text": "先主曰：曹公虽来，无能为也，我必有汉川矣。乃敛众拒险，终不交锋"
+   },
+   {
+    "id": "jilei",
+    "type": "order",
+    "side": "B",
+    "day": 34,
+    "army": "C4",
+    "mission": "retreat",
+    "target": "changan",
+    "text": "积月不拔，亡者日多。公曰：鸡肋。遂引军还"
+   },
+   {
+    "id": "take",
+    "type": "order",
+    "side": "A",
+    "day": 35,
+    "army": "S1",
+    "mission": "attack",
+    "target": "nanzheng",
+    "retreatAt": 0.5,
+    "text": "先主遂有汉中"
+   },
+   {
+    "id": "take_luck",
+    "type": "luck",
+    "side": "A",
+    "node": "nanzheng",
+    "day": 35,
+    "value": 1.4,
+    "text": "魏军弃南郑而走"
+   },
+   {
+    "id": "take_m",
+    "type": "morale",
+    "side": "B",
+    "day": 35,
+    "org": 0.2,
+    "desert": 0.05,
+    "text": "曹公既去，汉中诸屯不复守"
+   }
+  ],
+  "outcomes": [
+   {
+    "text": "夜烧走马谷鹿角",
+    "check": {
+     "type": "fired",
+     "node": "zoumagu",
+     "by": "A"
+    }
+   },
+   {
+    "text": "定军山蜀营未失",
+    "check": {
+     "type": "nodeOwner",
+     "node": "dingjun",
+     "owner": "A"
+    }
+   },
+   {
+    "text": "刘备得南郑（蜀军胜）",
+    "check": {
+     "type": "winner",
+     "side": "A"
+    }
+   }
+  ]
+ },
+ "victory": [
+  {
+   "side": "A",
+   "type": "nodeOwner",
+   "node": "nanzheng",
+   "owner": "A",
+   "text": "刘备遂有汉中"
+  },
+  {
+   "side": "A",
+   "type": "armyGone",
+   "army": "C1",
+   "text": "夏侯渊军覆没"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "dingjun",
+   "owner": "B",
+   "text": "攻破定军山蜀营"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "jiameng",
+   "owner": "B",
+   "text": "夺回葭萌关"
+  },
+  {
+   "side": "B",
+   "type": "armyGone",
+   "army": "S1",
+   "text": "刘备中军覆没"
+  }
+ ]
+}

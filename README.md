@@ -33,7 +33,7 @@ src/
   engine/tactics.js        战术 AI：条件 DSL、战术库、性格与智略门槛
   engine/round_adapter.js  引擎 → 界面的视图适配
   engine/campaign.js       战役层：补给、交战、战略 AI（StrategicAI）、历史模式、火攻/烧仓/截粮
-  data/scenarios.js        内置剧本：官渡之战、夷陵之战
+  data/scenarios.js        内置剧本：官渡之战、夷陵之战、赤壁之战、合肥之战、汉中之战
   ui/head.html  ui/body.html  ui/styles.css
   ui/main.js               战场、模式与页签切换、战斗编辑（调试台）、批量推演、战术编辑、规则编辑
   ui/camp_ui.js            战役地图、战役编辑器、自动推演、战役报告与史书体
