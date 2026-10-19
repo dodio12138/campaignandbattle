@@ -50,12 +50,9 @@ const CP = {
   STANDOFF_LOSS:0.004,
   // —— 时段：一日六时段，行军、接敌、夜袭按时段推进 ——
   LATE_ENGAGE_PH:2,             // 抵达敌前若已过此时段（上午）且非奇袭、非途中遭遇：隔营相望，次日清晨再战
-  NIGHT_ROUNDS:12,              // 夜战回合数（截粮、火攻多在夜间）
   NEAR_DAYS:1,                  // 敌军进入己方据点或军团此路程（日）之内即为"敌情"          // 对垒不战之日，双方零星矢石伤亡           // 粮仓入战时，每 15 单位存粮化为一部"辎重"（粮垛）
 };
-/* 一日六时段：每段约四个时辰。行军默认走清晨、上午、下午三段；截粮、火攻夜行（前半夜、后半夜、清晨） */
-const PERIODS=[{n:"后半夜",t:"00–04",night:true},{n:"清晨",t:"04–08"},{n:"上午",t:"08–12"},{n:"下午",t:"12–16"},{n:"傍晚",t:"16–20"},{n:"前半夜",t:"20–24",night:true}];
-const PERIOD_ROUNDS=[12,15,11,8,4,12];   // 某时段开战时，到日暮（或夜战结束）可打的回合数
+/* 一日六时段（PERIODS 定义在 round_engine.js，战斗共用）。行军默认走清晨、上午、下午三段；截粮、火攻夜行（前半夜、后半夜、清晨） */
 const MARCH_DAY=[1,2,3], MARCH_NIGHT=[5,0,1];
 const MISSION_NAME={hold:"驻守",attack:"进攻",fire:"火攻营寨",raid:"截粮·焚粮",delay:"阻击（坚守后撤回）",reinforce:"增援",escort:"护粮运粮",retreat:"撤回"};
 const FIRE_WX={大风:1.6,酷暑:1.4,晴:1,雾:0.7,雪:0.2,雨:0};
@@ -307,7 +304,7 @@ class Campaign{
       const go=ph===1||(fresh&&(list.some(a=>a.met)||raidy||ph<=CP.LATE_ENGAGE_PH));
       if(!go){ if(fresh){ for(const a of list) if(a.arrived) a.lateArr=true; this.note(`${this.nodes[node].name}：${PERIODS[ph].night?"夜幕已垂":"日已过午"}，两军隔营相望，约期来日`,""); } continue; }
       for(const a of list) if(a.lateArr){ a.arrived=true; a.lateArr=false; }   // 昨日晚到者，今晨作新到之军论
-      const e=this.makeEngagement(node,list); e.ph=ph; e.rounds=PERIODS[ph].night?CP.NIGHT_ROUNDS:PERIOD_ROUNDS[ph]; if(PERIODS[ph].night&&this.weather!=="雨") e.night=true;
+      const e=this.makeEngagement(node,list); e.ph=ph; if(PERIODS[ph].night) e.night=true;   // 战斗自开战时段起按时段推进（见 Battle）
       e.id="E"+this.day+"-"+ph+"-"+node; e.met=list.some(a=>a.met); this.fought[node]=this.day; eng.push(e);
       for(const s of ["A","B"]) this.alert("contact",s,`${this.nodes[node].name}：${this.sideName(e.att)}攻${this.sideName(e.def)}（${e.mode}${e.night?"·夜":""}）`); }
     if(ph===1) for(const a of this.armies) a.lateArr=false;   // 晚到之约只到次日清晨
@@ -398,7 +395,7 @@ class Campaign{
     const A=side(e.att), B=side(e.def);
     const luckBias={}; if(this.hist.on&&this.hist.tend>0) for(const a of this.hist.anchors.filter(a=>a.type==="luck"&&!a.off&&(!a.node||a.node===e.node)&&(a.day==null||this.day>=a.day))){ const bs=a.side===e.att?"A":"B"; luckBias[bs]=(luckBias[bs]||1)*(1+((a.value||1.2)-1)*Math.min(1,this.hist.tend*(a.weight??1)));
       if(!this.histDone[a.id]) (e.histLuck=e.histLuck||[]).push(a.id); }
-    return {seed:this.randInt(),luckBias,terrain:n.terrain||"平原",mode:e.mode==="围城"&&B.wall==null?"阵地":e.mode,days:1,rounds:e.rounds||P.DAY_ROUNDS,hold:0,weather:this.weather,night:e.night,A,B,
+    return {seed:this.randInt(),luckBias,terrain:n.terrain||"平原",mode:e.mode==="围城"&&B.wall==null?"阵地":e.mode,days:1,startPh:e.ph??this.ph,endPh:PERIODS[e.ph??this.ph].night?1:4,hold:0,weather:this.weather,night:!!e.night,A,B,
       campaign:{eid:e.id,node:e.node,day:this.day,ph:e.ph??this.ph,att:e.att,def:e.def,nodeName:n.name}};
   }
   /* 战斗结果写回 */
@@ -417,9 +414,10 @@ class Campaign{
     for(const a of this.armies) if(a.units.some(u=>u.n==="辎重")) a.cargo=a.units.filter(u=>u.n==="辎重"&&!u.gone).reduce((s,u)=>s+(u.cargo||0),0);
     for(const [id,c0] of Object.entries(cargo0)){ const a=this.army(id); const l=c0-(a.cargo||0); if(l>0.5) this.convoyLoss(a,l,c0); }
     const wB=r.winner==="相持"?null:r.winner, wC=wB?map[wB]:null, lC=wC?(wC==="A"?"B":"A"):null;
-    const span=Math.max(1,Math.ceil((bt.rnd||1)/(P.DAY_ROUNDS/4))); for(const cs of ["A","B"]) for(const id of e.armies[cs]){ const a=this.army(id); if(a) a.busy=this.tick+span; }   // 交战占去的时段
-    const eph=e.ph??this.ph, tw=e.night?(PERIODS[eph].night?"·夜":"·拂晓奇袭"):"";
-    const desc=`${n.name}之战（${PERIODS[eph].n}·${e.mode}${tw}${this.weather!=="晴"?"·"+this.weather:""}）：${r.reason==="目标达成撤出"&&bt.retreatSide?this.sideName(map[bt.retreatSide.name])+"目标达成，撤出":(wC?this.sideName(wC)+"胜·"+r.reason:"相持")}；${this.sideName(e.att)}损 ${Math.round(r.A.loss*100)}%，${this.sideName(e.def)}损 ${Math.round(r.B.loss*100)}%${r.A.burnt>0.01||r.B.burnt>0.01?`；焚辎重 ${Math.round(Math.max(r.A.burnt,r.B.burnt)*100)}%`:""}`;
+    const span=Math.max(1,bt.periodsUsed||1); for(const cs of ["A","B"]) for(const id of e.armies[cs]){ const a=this.army(id); if(a) a.busy=this.tick+span; }   // 交战实占的时段（战斗时钟精确交回）
+    const endPh=(e.ph??this.ph)+span-1, endDay=this.day+Math.floor(endPh/6); for(let d=this.day+1;d<=endDay;d++) this.fought[e.node]=Math.max(this.fought[e.node]||0,d);   // 跨日之战：次日不再另开一战
+    const eph=e.ph??this.ph, tw=e.night?(PERIODS[eph].night?"·夜":"·拂晓奇袭"):"", tEnd=PERIODS[(eph+span-1)%6].n, tSpan=span>1?`${PERIODS[eph].n}至${(eph+span-1)>=6?"次日":""}${tEnd}`:PERIODS[eph].n;
+    const desc=`${n.name}之战（${tSpan}·${e.mode}${tw}${this.weather!=="晴"?"·"+this.weather:""}）：${r.reason==="目标达成撤出"&&bt.retreatSide?this.sideName(map[bt.retreatSide.name])+"目标达成，撤出":(wC?this.sideName(wC)+"胜·"+r.reason:"相持")}；${this.sideName(e.att)}损 ${Math.round(r.A.loss*100)}%，${this.sideName(e.def)}损 ${Math.round(r.B.loss*100)}%${r.A.burnt>0.01||r.B.burnt>0.01?`；焚辎重 ${Math.round(Math.max(r.A.burnt,r.B.burnt)*100)}%`:""}`;
     this.note(desc,"battle");
     const menOf=cs=>e.armies[cs].reduce((t,id)=>t+this.combatUnits(this.army(id)).reduce((q,u)=>q+u.men,0),0);
     this.battles.push({day:this.day,ph:e.ph??this.ph,met:!!e.met,node:e.node,place:n.name,mode:e.mode,night:e.night,weather:this.weather,att:e.att,def:e.def,armies:{A:e.armies.A.map(id=>this.army(id).name),B:e.armies.B.map(id=>this.army(id).name)},

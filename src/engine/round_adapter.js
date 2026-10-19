@@ -32,8 +32,8 @@ function roundView(b,s,mem){
     myEngines:s.engines||0, enLured:en.lured||0, baitSeen:!!s.baitSeen, enFoodKnown:en.food, myLured:s.lured||0, lureBlown:!!s.lureBlown, lureSeen:s.lureSeen||0, enEngines:en.engines||0, myFood:s.food, enFood:en.wall?null:en.food, failDays:s.failDays||0, starving:s.starving||0 };
   const lastRep=b.daily&&b.daily.length?b.daily[b.daily.length-1][s.name]:null;
   const seeR=(s.int??60)>=85?1:(s.int??60)>=50?2:(s.int??60)>=30?3:4; const enTactic=en.tactic&&(contact||b.rnd-(mem.enSeen||0)>=seeR)?en.tactic.id:null;     // 接敌后，或对方战术持续若干回合（智略越高越快）方可看破
-  return { mission:s.mission?s.mission.type:"rout", burnt:en.supplyBurnt?en.supplyBurnt():0, weather:b.weather, night:!!b.night0, t:b.rnd, day:b.day, works, enTactic, dayStats:lastRep, me, en:e, contact, contactRounds:mem.contactR, idleRounds:mem.idle||0, isDefender:!b.bothAtk&&s===b.B,
-    terrain:{width:b.terr.width,wing:b.terr.wing,defBonus:b.terr.def_mult-1}, dayLeft:(P.DAY_ROUNDS-b.dayRound)/P.DAY_ROUNDS, mode:b.mode };
+  return { mission:s.mission?s.mission.type:"rout", burnt:en.supplyBurnt?en.supplyBurnt():0, weather:b.weather, night:!!b.isNight, t:b.rnd, day:b.day, works, enTactic, dayStats:lastRep, me, en:e, contact, contactRounds:mem.contactR, idleRounds:mem.idle||0, isDefender:!b.bothAtk&&s===b.B,
+    terrain:{width:b.terr.width,wing:b.terr.wing,defBonus:b.terr.def_mult-1}, dayLeft:b.dayLeft, mode:b.mode };
 }
 function attachRoundAI(b, ais){
   const mem={A:{},B:{}};

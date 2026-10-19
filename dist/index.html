@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- campaignandbattle v0.20.0 · 由 tools/build.js 生成，请勿直接修改，改 src/ 后重新构建 -->
+<!-- campaignandbattle v0.21.0 · 由 tools/build.js 生成，请勿直接修改，改 src/ 后重新构建 -->
 </head>
 <body>
 <title>汉末会战沙盘</title>
@@ -598,6 +598,7 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
 .cmap .cm-night{fill:#0c1426;opacity:.14}
 /* 小尖头：当下一步 */
 .cmap .cp-step{fill:var(--ca);stroke:color-mix(in srgb,var(--ca) 60%,#000);stroke-width:.6} .cmap .cp-step.b{fill:var(--cb);stroke:color-mix(in srgb,var(--cb) 60%,#000)}
+.ph-bar.mini{display:inline-grid;width:auto;font-size:10.5px} .ph-bar.mini span{padding:0 5px}
 </style>
 <header class="top">
   <h1>汉末会战沙盘</h1>
@@ -615,7 +616,7 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
     <button role="tab" aria-selected="false" data-mode="edit" data-view="v-batch" id="tab-batch" hidden>批量推演</button>
   </nav>
   <div class="sub" id="top-sub">选剧本开战役，或选战例打一场会战</div>
-  <span class="ver">v20 · 游玩 / 编辑器</span>
+  <span class="ver">v21 · 游玩 / 编辑器</span>
 </header>
 
 <div class="layout">
@@ -636,7 +637,7 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
           <select id="speed" class="btn" aria-label="推演速度" style="padding:4px 6px">
             <option value="1400">慢</option><option value="800" selected>中</option><option value="380">快</option><option value="120">极快</option>
           </select>
-          <div class="turn"><span class="stage-pill" id="stage">野战</span><span class="day-pill" id="day">第1日</span><span>回合</span><span class="rnd" id="rnd">0</span><span class="phase-pill" id="phase" data-p="0">远距</span></div>
+          <div class="turn"><span class="ph-bar mini" id="bph" aria-label="时段"></span><span class="stage-pill" id="stage">野战</span><span class="day-pill" id="day">第1日</span><span>回合</span><span class="rnd" id="rnd">0</span><span class="phase-pill" id="phase" data-p="0">远距</span></div>
         </div>
         <div class="map" id="map">
           <div class="field" id="field">
@@ -696,7 +697,9 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
         <div id="mode-extra" style="display:grid;gap:6px"></div>
         <div class="slider-row"><span class="lbl">会战天数</span><input type="range" id="days" min="1" max="60" step="1"><output id="days-o"></output></div>
         <div class="form-row"><span class="lbl">天气</span><select id="weather"><option>晴</option><option>雨</option><option>大风</option><option>雾</option><option>雪</option><option>酷暑</option></select></div>
-        <label class="chk"><input type="checkbox" id="night"> 夜战（远程大减、计谋易成、易溃）</label>
+        <div class="form-row"><span class="lbl">开战时段</span><select id="startph" aria-label="开战时段"></select></div>
+        <label class="chk"><input type="checkbox" id="night"> 奇袭：白天开战时，首个时段也按夜战论（拂晓奇袭）</label>
+        <div class="note">白天每段约 4 回合（傍晚 3），夜间每段 5 回合；傍晚议事，可收兵过夜，或夜战续攻。</div>
         <div class="slider-row" id="hold-row"><span class="lbl">对射回合</span><input type="range" id="hold" min="0" max="4" step="1"><output id="hold-o"></output></div>
       </div>
     </section>
@@ -808,7 +811,9 @@ const DEFAULT_P = {
   SKIRMISH_EVADE:0.35, SKIRMISH_EVADE_CAV:0.6, SKIRMISH_MELEE:0.6, SKIRMISH_RECHARGE:2, SKIRMISH_WITHDRAW:0.4,
   SKIRMISH_PURSUIT_TAKEN:0.3, SKIRMISH_PURSUIT_POWER:1.5,
   // —— 多日会战 ——
-  DAY_ROUNDS:15,            // 一日的回合数，日暮收兵
+  PH_ROUNDS_DAY:4,          // 清晨、上午、下午每时段回合数
+  PH_ROUNDS_DUSK:3,         // 傍晚回合数（白天合计 = 3×时段 + 傍晚 = 15）
+  PH_ROUNDS_NIGHT:5,        // 夜间（前半夜、后半夜）每时段回合数：夜袭、夜战续攻
   NIGHT_ORG:0.35,           // 夜间组织度回复（上限的比例，×(0.6+0.4×统帅/100)）
   NIGHT_STAM:70,            // 夜间体力回复
   NIGHT_RALLY:0.5,          // 溃部夜间收拢概率（×统帅/100）
@@ -1192,12 +1197,21 @@ class Side{
   power(){return this.units.reduce((s,u)=>s+((u.routed||u.isSupply)?0:u.men*Math.max(0,u.orgp)),0)}
 }
 
+/* 一日六时段（战役与战斗共用）：白天四段，夜间两段 */
+const PERIODS=[{n:"后半夜",t:"00–04",night:true},{n:"清晨",t:"04–08"},{n:"上午",t:"08–12"},{n:"下午",t:"12–16"},{n:"傍晚",t:"16–20"},{n:"前半夜",t:"20–24",night:true}];
+const phRounds=ph=>PERIODS[ph].night?P.PH_ROUNDS_NIGHT:(ph===4?P.PH_ROUNDS_DUSK:P.PH_ROUNDS_DAY);
+const dayRounds=()=>3*P.PH_ROUNDS_DAY+P.PH_ROUNDS_DUSK;   // 白天合计回合
 class Battle{
   constructor(spec, seed){
     this.R=makeRng(seed ?? Math.floor(Math.random()*4294967296));
     this.terr=TERRAIN[spec.terrain]; this.mode=spec.mode; this.hold=spec.mode==="攻守"?(spec.hold||0):0;
     this.stage = spec.mode==="围城"?"围城战":(spec.mode==="阵地"?"阵地战":"野战"); this.daily=[]; this.endReason=null;
-    this.days=Math.max(1,spec.days||1); this.firstRounds=spec.rounds||0; this.day=1; this.dayStart=0; this.weather=spec.weather||"晴"; this.night0=!!spec.night;
+    this.days=Math.max(1,spec.days||1); this.day=1; this.dayStart=0; this.weather=spec.weather||"晴";
+    // 时钟：自开战时段起逐段推进；endPh 为末日收兵的时段（白天开打默认傍晚，夜间开打默认清晨）
+    this.startPh=spec.startPh??(spec.night?5:1); this.ph=this.startPh; this.phR=0; this.clock=0;
+    this.endPh=spec.endPh??(PERIODS[this.startPh].night?(this.days>1?4:1):4);
+    this.dawnRaid=!!spec.night&&!PERIODS[this.startPh].night;   // 拂晓奇袭：开战那一段按夜战论
+    this.night0=PERIODS[this.startPh].night||this.dawnRaid; this.nightFight=PERIODS[this.startPh].night; this.newDay=true; this.hadDay=!PERIODS[this.startPh].night;
     this.bothAtk = spec.mode==="决战"||spec.mode==="遭遇";
     this.A=new Side(this,"A",spec.A,true); this.B=new Side(this,"B",spec.B,this.bothAtk);
     this.phase = this.bothAtk?1:0; this.rnd=0; this.done=false; this.winner=null; this.nightRetreat=false;
@@ -1218,6 +1232,11 @@ class Battle{
   other(s){return s===this.A?this.B:this.A;}
   get deploying(){return this.A.aliveColumn().length>0||this.B.aliveColumn().length>0;}
   get dayRound(){return this.rnd-this.dayStart;}
+  get isNight(){ return PERIODS[this.ph].night||(this.dawnRaid&&this.clock===0); }
+  /* 今日（或今夜）剩余回合 / 白天回合：供战术 AI 判断"日暮将至" */
+  get dayLeft(){ let n=phRounds(this.ph)-this.phR; if(PERIODS[this.ph].night){ if(this.ph===5) n+=phRounds(0); } else for(let p=this.ph+1;p<=4;p++) n+=phRounds(p); return n/dayRounds(); }
+  get periodsUsed(){ return Math.max(this.clock,this.usedClock||0); }   // 实占时段：交回战役
+  timeText(){ return `第${this.day}日 · ${PERIODS[this.ph].n}`; }
   /* 城墙完好时，攻方只能在有限的城段展开（云梯、城门、缺口） */
   applyWallWidth(){ for(const s of [this.A,this.B]){ const en=this.other(s); s.applyFormationShape(); const w=s.baseWidth; s.width=w;
       const nw = en.wall ? Math.max(2,Math.round(w*(P.WALL_WIDTH_MIN+(1-P.WALL_WIDTH_MIN)*(1-en.wall.W)))) : w;
@@ -1225,18 +1244,19 @@ class Battle{
   anyFight(){ return [this.A,this.B].some(s=>s.plan==="FIGHT"||s.plan==="SORTIE"); }
   startDay(){ for(const s of [this.A,this.B]) s.dayStats={power0:s.power(), en0:this.other(s).power(), dead0:s.units.reduce((a,u)=>a+u.dead,0), routed0:s.units.filter(u=>u.routed).length, attackRounds:0, contactRounds:0, work0:this.workOf(this.other(s))}; }
   workOf(x){ return x.wall?x.wall.W:(x.fortMax>0?x.fort/x.fortMax:1); }
-  planName(p){ return {FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"}[p]||p; }
+  planName(p){ return {NIGHT:"夜战续攻",FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"}[p]||p; }
 
   step(){
     if(this.done) return;
     const A=this.A,B=this.B,sides=[A,B]; const terr=this.terr;
     this.rnd++; const rnd=this.rnd; const dr=rnd-this.dayStart; this.fx=[];   // fx：本回合攻击动作（供界面动画）
-    if(dr===1){ this.startDay();
-      if(this.day>1&&!this.anyFight()){            // 双方都不出战：整日对垒，直接进入夜间
-        this.rnd+=P.DAY_ROUNDS-1;
+    this.roundPh=this.ph; this.roundIdx=this.phR+1; this.usedClock=this.clock+1;   // 本回合落在第几个时段（自开战算起）
+    if(this.newDay){ this.newDay=false; this.startDay();
+      if(this.day>1&&!PERIODS[this.ph].night&&!this.anyFight()){            // 双方都不出战：整日对垒，直到傍晚议事
+        let left=phRounds(this.ph)-this.phR; for(let p=this.ph+1;p<=4;p++) left+=phRounds(p);
+        this.rnd+=left-1; this.clock+=4-this.ph; this.ph=4; this.phR=0;
         this.events=[{t:`第${this.day}日：两军对垒未战（甲军${this.planName(A.plan)}，乙军${this.planName(B.plan)}）`,s:""}];
-        if(this.day<this.days) this.night(); else { this.winner=null; this.endReason="期满对峙"; this.finish(); }
-        return; } }
+        this.dusk(); return; } }
     if(this.tacticHook) this.tacticHook(this);
     // 战术效果与克制
     for(const s of sides){ const T=s.tactic, E=this.other(s).tactic; const m={atk:1,def:1,orgTaken:1,orgDealt:1,stam:1,charge:1};
@@ -1350,7 +1370,7 @@ class Battle{
       if(o.screen) act(s,"SHIELD"); if(o.fire) act(s,"FIRE"); if(o.repair) act(s,"REPAIR");
       if(climbW(s)>0) act(s,"CLIMB"); if(fa.W>0) act(s,"WALL_HOLD"); else if(fa.L>0.3) act(s,"FORT_HOLD");
       if(standoff) act(s,"STANDOFF"); if(s.food!=null&&s.food<=0) act(s,"STARVING"); if(this.few[s.name]>0) act(s,"FEW");
-      const W={"雨":"W_RAIN","大风":"W_WIND","雾":"W_FOG","雪":"W_SNOW","酷暑":"W_HEAT"}[this.weather]; if(W) act(s,W); if(this.night0) act(s,"NIGHT");
+      const W={"雨":"W_RAIN","大风":"W_WIND","雾":"W_FOG","雪":"W_SNOW","酷暑":"W_HEAT"}[this.weather]; if(W) act(s,W); if(this.isNight) act(s,"NIGHT");
       const M={destroy:"M_RAID",hold:"M_HOLD",delay:"M_HOLD",escort:"M_ESCORT"}[s.mission.type]; if(M) act(s,M); }
     for(const s of sides){ s.sm.ranged*=s.fm.ranged||1; for(const k of ["atk","def","orgTaken","orgDealt","stam","charge"]) s.tm[k]*=s.sm[k]; }
 
@@ -1581,7 +1601,7 @@ class Battle{
     const gone=s=>!s.aliveFront().length&&!s.aliveColumn().length;
     const ad=gone(A), bd=gone(B);
     if(ad||bd){ this.winner=(ad&&bd)?null:(ad?B:A); this.endReason = this.mode==="围城"?(this.winner===A?"城破":"攻城失败溃退"):"溃败"; this.finish(); return; }
-    if(dr>=(this.day===1&&this.firstRounds?this.firstRounds:P.DAY_ROUNDS)){ if(this.day<this.days) this.night(); else { this.winner=null; this.endReason="期满对峙"; this.dayReport(); this.finish(); } }   // 首日可打的回合数：战役中按开战时段折算
+    this.phR++; if(this.phR>=phRounds(this.ph)) this.nextPh();
   }
 
   /* 当日战况 */
@@ -1601,10 +1621,33 @@ class Battle{
       rep[s.name].failDays=s.failDays; }
     rep.stage=this.stage; this.daily.push(rep); return rep;
   }
-  /* 日暮收兵：夜议定次日方略 → 撤退/投降 → 救治、修整、筑垒、造械、存粮 → 重新列阵 */
-  night(){
+  /* ───── 时钟：一段打满即入下一段。傍晚终了议事（收兵或夜战续攻）；夜战至晓则略作休整 ───── */
+  nextPh(){ const from=this.ph; this.phR=0; this.clock++;
+    const last=this.day>=this.days;
+    if(from===4){ this.dusk(); return; }                                   // 傍晚终了：议事
+    if(from===this.endPh&&last){ this.winner=null; this.endReason=from===0?"夜战至晓，各自收兵":(from===1&&!this.hadDay?"天明收兵":"期满对峙"); this.dayReport(); this.finish(); return; }
+    if(from===0){ this.ph=1; if(this.hadDay) this.dawnAfterNight(); this.hadDay=true; this.nightFight=false; this.newDay=!this.done; return; }   // 天明
+    this.ph=(from+1)%PERIODS.length; }
+  /* 傍晚：日暮议定方略。有一方夜战续攻 → 不解甲转入前半夜；否则收兵过夜，次日清晨再战（或末日期满） */
+  dusk(){ const A=this.A,B=this.B, ev=this.events;
+    if(this.decide()) return;
+    const night=[A,B].some(s=>s.plan==="NIGHT");
+    if(night){ this.nightFight=true; this.ph=5; if(this.day>=this.days&&this.endPh===4) this.endPh=0;
+      const w=[A,B].filter(s=>s.plan==="NIGHT").map(s=>s.name==="A"?"甲":"乙").join("、");
+      ev.push({t:`暮色四合，${w}军不解甲，转为夜战`,s:"",big:true,night:true}); return; }
+    if(this.day>=this.days){ this.winner=null; this.endReason="期满对峙"; this.finish(); return; }
+    this.rest(); this.clock+=2; this.ph=1; this.newDay=true; }
+  /* 夜战至晓：不得安歇，只略收溃卒、稍复组织，耗粮一日 */
+  dawnAfterNight(){ const ev=this.events;
+    for(const s of [this.A,this.B]){ if(s.food!=null){ s.food-=1; if(s.food<0){ s.food=0; s.starving++; } }
+      for(const u of s.units){ if(u.routed){ if(!u.destroyed&&this.r()<P.NIGHT_RALLY*s.cmd/100*0.5){ u.routed=false; u.org=u.maxOrg*P.NIGHT_RALLY_ORG; } continue; }
+        u.org=Math.min(u.maxOrg,Math.max(0,u.org)+u.maxOrg*P.NIGHT_ORG*0.3); u.stamina=Math.min(100,u.stamina+P.NIGHT_STAM*0.3); }
+      if(s.plan==="NIGHT") s.plan="FIGHT"; }
+    this.day++; this.dayStart=this.rnd; ev.push({t:`夜战至晓，第${this.day}日`,s:"",night:true}); }
+  /* 日暮议事：定次日方略 → 奇袭粮道 → 撤退/投降/夜遁。结束战斗则返回 true */
+  decide(){
     const A=this.A,B=this.B, ev=this.events;
-    const rep=this.dayReport();
+    const rep=this.dayReport(); this.lastRep=rep;
     for(const s of [A,B]){ s.plan="FIGHT"; s.planReason=""; s.aiPlanned=false; s.lured=0; s.ambush=0; s.lureBlown=false; s.looting=0; s.baitSeen=false; }
     if(this.dayHook) this.dayHook(this);
     for(const k of ["A","B"]) rep[k].plan=this[k].plan;
@@ -1617,13 +1660,17 @@ class Battle{
       else if(cav){ const l=cav.men*P.RAID_LOSS; cav.men-=l; cav.dead+=l; cav.org=Math.min(cav.org,cav.maxOrg*0.3); en.raidsSeen=(en.raidsSeen||0)+1;
         ev.push({t:"劫粮之兵中伏，铩羽而归",s:s.name,big:true,night:true}); } }
     for(const s of [A,B]){
-      if(s.plan==="SURRENDER"){ this.winner=this.other(s); this.endReason="开城投降"; this.surrender=s; ev.push({t:`第${this.day}日夜，城中${s.food<=0?"粮尽":"力竭"}，开城投降`,s:s.name,big:true,night:true}); this.finish(); return; }
+      if(s.plan==="SURRENDER"){ this.winner=this.other(s); this.endReason="开城投降"; this.surrender=s; ev.push({t:`第${this.day}日夜，城中${s.food<=0?"粮尽":"力竭"}，开城投降`,s:s.name,big:true,night:true}); this.finish(); return true; }
       if(s.plan==="WITHDRAW"){ this.winner=this.other(s); this.nightRetreat=true; this.endReason=(this.mode==="围城"&&s===A)?"撤围":"撤退";
-        ev.push({t:`第${this.day}日夜，${s.name==="A"?"甲":"乙"}军${this.endReason==="撤围"?"解围而去":"拔营撤退"}：${s.planReason}`,s:s.name,big:true,night:true}); this.finish(); return; } }
+        ev.push({t:`第${this.day}日夜，${s.name==="A"?"甲":"乙"}军${this.endReason==="撤围"?"解围而去":"拔营撤退"}：${s.planReason}`,s:s.name,big:true,night:true}); this.finish(); return true; } }
     // 无战术AI的一方沿用旧规则：战力不足对方一半者乘夜遁走
     const pa=A.power(), pb=B.power();
     const flee = (!A.aiPlanned&&!A.wall&&pa<P.NIGHT_RETREAT_RATIO*pb) ? A : ((!B.aiPlanned&&!B.wall&&pb<P.NIGHT_RETREAT_RATIO*pa) ? B : null);
-    if(flee){ this.winner=this.other(flee); this.nightRetreat=true; this.endReason="夜遁"; ev.push({t:`第${this.day}日暮，${flee.name==="A"?"甲":"乙"}军自度不支，乘夜遁走`,s:flee.name,big:true,night:true}); this.finish(); return; }
+    if(flee){ this.winner=this.other(flee); this.nightRetreat=true; this.endReason="夜遁"; ev.push({t:`第${this.day}日暮，${flee.name==="A"?"甲":"乙"}军自度不支，乘夜遁走`,s:flee.name,big:true,night:true}); this.finish(); return true; }
+    return false; }
+  /* 收兵过夜：救治、修整、筑垒、造械、存粮 → 重新列阵 */
+  rest(){
+    const A=this.A,B=this.B, ev=this.events, rep=this.lastRep;
     const info={};
     for(const s of [A,B]){
       const c=s.cmd/100; let rallied=0; const rest=s.plan==="REST"; let healed=0;
@@ -1656,7 +1703,7 @@ class Battle{
     for(const s of [A,B]){ const en=this.other(s); if(s.lastPlan==="SORTIE"&&rep[s.name].exchange>1&&en.engines>0){ const es=en.engineUnits(); en.destroyEngine(es.reduce((m,x)=>x.hp<m.hp?x:m,es[0])); ev.push({t:"出城突击得手，焚毁敌攻城器械一具",s:s.name,big:true}); } s.lastPlan=s.plan; }
     for(const s of [A,B]){ const hadGeneral=s.generalAlive; s.generalAlive=true; if(this.formHook) this.formHook(this,s); s.applyFormationShape(); s.refresh(); s.column=[]; s.deploy(s.units.filter(u=>!u.routed)); info[s.name].hadGeneral=hadGeneral; }
     this.applyWallWidth();
-    if(this.stage==="野战"){ const quiet=rep.A.attack+rep.B.attack<P.DAY_ROUNDS*0.5; if(A.fort>=0.5||B.fort>=0.5||(quiet&&this.day>=1)){ this.stage="阵地战"; ev.push({t:"双方转入阵地相持，各自安营扎寨",s:"",night:true}); } }
+    if(this.stage==="野战"){ const quiet=rep.A.attack+rep.B.attack<dayRounds()*0.5; if(A.fort>=0.5||B.fort>=0.5||(quiet&&this.day>=1)){ this.stage="阵地战"; ev.push({t:"双方转入阵地相持，各自安营扎寨",s:"",night:true}); } }
     this.day++; this.dayStart=this.rnd; this.phase=this.bothAtk?1:(this.mode==="围城"?0:1);
     const pl=s=>this.planName(s.plan);
     ev.push({t:`日暮收兵。救回伤兵：甲 ${info.A.healed}、乙 ${info.B.healed}；收拢溃部：甲 ${info.A.rallied}、乙 ${info.B.rallied}。次日方略：甲${pl(A)}，乙${pl(B)}`,s:"",big:false,night:true});
@@ -2036,7 +2083,7 @@ function tacticsImport(o){ if(!o||!o.list) return; if(typeof o.w==="number") T_C
     if(d.conds) d.conds.forEach((c,i)=>{ if(T.phases[i]&&i>0&&c) T.phases[i].cond=JSON.parse(JSON.stringify(c)); });
     if(d.aborts) T.aborts=JSON.parse(JSON.stringify(d.aborts)); if(d.boosts) T.boosts=JSON.parse(JSON.stringify(d.boosts)); } }
 function tacticsReset(){ T_COUNTER_WEIGHT=1.0; tacticsImport({w:1,list:JSON.parse(T_DEFAULT_SNAPSHOT)}); }
-const PLAN_NAME={FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"};
+const PLAN_NAME={NIGHT:"夜战续攻",FIGHT:"再战",REST:"休整",FORTIFY:"筑垒",SIEGEWORK:"造攻城器械",SORTIE:"出城突击",WITHDRAW:"撤退",SURRENDER:"开城投降",RAID:"奇袭粮道"};
 const TACTIC_BY_ID=Object.fromEntries(TACTICS.map(t=>[t.id,t]));
 
 /* ───────── 指挥官 AI ───────── */
@@ -2159,6 +2206,9 @@ class TacticalAI{
     // 劫粮不再是夜议方略：由战役地图上派出以"焚粮"为目标的军团、实际接战来完成
     if(!besieged) add("WITHDRAW",-0.7-rsv*1.4+(fieldFood&&w.myFood<=2?0.6:0)+(fieldFood&&w.myFood<=0?0.8:0)+(fail>=2?0.55:0)+(s.li<=1?0.5:0)+(s.li===0?0.4:0)-p.risk*0.7+p.def*0.4+((d.lossFrac||0)>0.2?0.2:0)+(fail>=3?0.3:0),
         fail>=2?`久攻不下已 ${fail} 日，伤亡持续`:`形势${s.label}，难以为继`);
+    // 夜战续攻：敌阵动摇、我占上风，乘夜不解甲（好险者、多谋者更肯为之；攻坚城则不宜）
+    if(v.contact||(d.attackRounds||0)>0) add("NIGHT",-0.05+(has(s,"敌阵动摇")?0.45:0)+(s.score>0.3?0.25:0)+p.risk*0.6+p.guile*0.3+((v.me.int??60)>=75?0.1:0)-(myOrg<0.5?0.6:0)-(besieger&&(w.enWall||0)>0.3?0.8:0)-(besieged?1:0),
+        `敌阵动摇，乘夜续攻，不使喘息`);
     if(besieged&&w.myFood!=null&&w.myFood<=0) add("SURRENDER",-0.2+(s.li<=2?0.6:0)+(w.starving||0)*0.25-p.risk*0.3,`粮尽 ${w.starving||0} 日，军无斗志`);
     opts.sort((a,b)=>b.sc-a.sc); const best=opts[0], second=opts[1]; if(best.id==="RAID") this.raids=(this.raids||0)+1;
     this.plan=best.id; this.dayForced=best.id==="SORTIE"?"SORTIE":null; this.cur=null; this.lastEval=-99;
@@ -2203,8 +2253,8 @@ function roundView(b,s,mem){
     myEngines:s.engines||0, enLured:en.lured||0, baitSeen:!!s.baitSeen, enFoodKnown:en.food, myLured:s.lured||0, lureBlown:!!s.lureBlown, lureSeen:s.lureSeen||0, enEngines:en.engines||0, myFood:s.food, enFood:en.wall?null:en.food, failDays:s.failDays||0, starving:s.starving||0 };
   const lastRep=b.daily&&b.daily.length?b.daily[b.daily.length-1][s.name]:null;
   const seeR=(s.int??60)>=85?1:(s.int??60)>=50?2:(s.int??60)>=30?3:4; const enTactic=en.tactic&&(contact||b.rnd-(mem.enSeen||0)>=seeR)?en.tactic.id:null;     // 接敌后，或对方战术持续若干回合（智略越高越快）方可看破
-  return { mission:s.mission?s.mission.type:"rout", burnt:en.supplyBurnt?en.supplyBurnt():0, weather:b.weather, night:!!b.night0, t:b.rnd, day:b.day, works, enTactic, dayStats:lastRep, me, en:e, contact, contactRounds:mem.contactR, idleRounds:mem.idle||0, isDefender:!b.bothAtk&&s===b.B,
-    terrain:{width:b.terr.width,wing:b.terr.wing,defBonus:b.terr.def_mult-1}, dayLeft:(P.DAY_ROUNDS-b.dayRound)/P.DAY_ROUNDS, mode:b.mode };
+  return { mission:s.mission?s.mission.type:"rout", burnt:en.supplyBurnt?en.supplyBurnt():0, weather:b.weather, night:!!b.isNight, t:b.rnd, day:b.day, works, enTactic, dayStats:lastRep, me, en:e, contact, contactRounds:mem.contactR, idleRounds:mem.idle||0, isDefender:!b.bothAtk&&s===b.B,
+    terrain:{width:b.terr.width,wing:b.terr.wing,defBonus:b.terr.def_mult-1}, dayLeft:b.dayLeft, mode:b.mode };
 }
 function attachRoundAI(b, ais){
   const mem={A:{},B:{}};
@@ -2275,12 +2325,9 @@ const CP = {
   STANDOFF_LOSS:0.004,
   // —— 时段：一日六时段，行军、接敌、夜袭按时段推进 ——
   LATE_ENGAGE_PH:2,             // 抵达敌前若已过此时段（上午）且非奇袭、非途中遭遇：隔营相望，次日清晨再战
-  NIGHT_ROUNDS:12,              // 夜战回合数（截粮、火攻多在夜间）
   NEAR_DAYS:1,                  // 敌军进入己方据点或军团此路程（日）之内即为"敌情"          // 对垒不战之日，双方零星矢石伤亡           // 粮仓入战时，每 15 单位存粮化为一部"辎重"（粮垛）
 };
-/* 一日六时段：每段约四个时辰。行军默认走清晨、上午、下午三段；截粮、火攻夜行（前半夜、后半夜、清晨） */
-const PERIODS=[{n:"后半夜",t:"00–04",night:true},{n:"清晨",t:"04–08"},{n:"上午",t:"08–12"},{n:"下午",t:"12–16"},{n:"傍晚",t:"16–20"},{n:"前半夜",t:"20–24",night:true}];
-const PERIOD_ROUNDS=[12,15,11,8,4,12];   // 某时段开战时，到日暮（或夜战结束）可打的回合数
+/* 一日六时段（PERIODS 定义在 round_engine.js，战斗共用）。行军默认走清晨、上午、下午三段；截粮、火攻夜行（前半夜、后半夜、清晨） */
 const MARCH_DAY=[1,2,3], MARCH_NIGHT=[5,0,1];
 const MISSION_NAME={hold:"驻守",attack:"进攻",fire:"火攻营寨",raid:"截粮·焚粮",delay:"阻击（坚守后撤回）",reinforce:"增援",escort:"护粮运粮",retreat:"撤回"};
 const FIRE_WX={大风:1.6,酷暑:1.4,晴:1,雾:0.7,雪:0.2,雨:0};
@@ -2532,7 +2579,7 @@ class Campaign{
       const go=ph===1||(fresh&&(list.some(a=>a.met)||raidy||ph<=CP.LATE_ENGAGE_PH));
       if(!go){ if(fresh){ for(const a of list) if(a.arrived) a.lateArr=true; this.note(`${this.nodes[node].name}：${PERIODS[ph].night?"夜幕已垂":"日已过午"}，两军隔营相望，约期来日`,""); } continue; }
       for(const a of list) if(a.lateArr){ a.arrived=true; a.lateArr=false; }   // 昨日晚到者，今晨作新到之军论
-      const e=this.makeEngagement(node,list); e.ph=ph; e.rounds=PERIODS[ph].night?CP.NIGHT_ROUNDS:PERIOD_ROUNDS[ph]; if(PERIODS[ph].night&&this.weather!=="雨") e.night=true;
+      const e=this.makeEngagement(node,list); e.ph=ph; if(PERIODS[ph].night) e.night=true;   // 战斗自开战时段起按时段推进（见 Battle）
       e.id="E"+this.day+"-"+ph+"-"+node; e.met=list.some(a=>a.met); this.fought[node]=this.day; eng.push(e);
       for(const s of ["A","B"]) this.alert("contact",s,`${this.nodes[node].name}：${this.sideName(e.att)}攻${this.sideName(e.def)}（${e.mode}${e.night?"·夜":""}）`); }
     if(ph===1) for(const a of this.armies) a.lateArr=false;   // 晚到之约只到次日清晨
@@ -2623,7 +2670,7 @@ class Campaign{
     const A=side(e.att), B=side(e.def);
     const luckBias={}; if(this.hist.on&&this.hist.tend>0) for(const a of this.hist.anchors.filter(a=>a.type==="luck"&&!a.off&&(!a.node||a.node===e.node)&&(a.day==null||this.day>=a.day))){ const bs=a.side===e.att?"A":"B"; luckBias[bs]=(luckBias[bs]||1)*(1+((a.value||1.2)-1)*Math.min(1,this.hist.tend*(a.weight??1)));
       if(!this.histDone[a.id]) (e.histLuck=e.histLuck||[]).push(a.id); }
-    return {seed:this.randInt(),luckBias,terrain:n.terrain||"平原",mode:e.mode==="围城"&&B.wall==null?"阵地":e.mode,days:1,rounds:e.rounds||P.DAY_ROUNDS,hold:0,weather:this.weather,night:e.night,A,B,
+    return {seed:this.randInt(),luckBias,terrain:n.terrain||"平原",mode:e.mode==="围城"&&B.wall==null?"阵地":e.mode,days:1,startPh:e.ph??this.ph,endPh:PERIODS[e.ph??this.ph].night?1:4,hold:0,weather:this.weather,night:!!e.night,A,B,
       campaign:{eid:e.id,node:e.node,day:this.day,ph:e.ph??this.ph,att:e.att,def:e.def,nodeName:n.name}};
   }
   /* 战斗结果写回 */
@@ -2642,9 +2689,10 @@ class Campaign{
     for(const a of this.armies) if(a.units.some(u=>u.n==="辎重")) a.cargo=a.units.filter(u=>u.n==="辎重"&&!u.gone).reduce((s,u)=>s+(u.cargo||0),0);
     for(const [id,c0] of Object.entries(cargo0)){ const a=this.army(id); const l=c0-(a.cargo||0); if(l>0.5) this.convoyLoss(a,l,c0); }
     const wB=r.winner==="相持"?null:r.winner, wC=wB?map[wB]:null, lC=wC?(wC==="A"?"B":"A"):null;
-    const span=Math.max(1,Math.ceil((bt.rnd||1)/(P.DAY_ROUNDS/4))); for(const cs of ["A","B"]) for(const id of e.armies[cs]){ const a=this.army(id); if(a) a.busy=this.tick+span; }   // 交战占去的时段
-    const eph=e.ph??this.ph, tw=e.night?(PERIODS[eph].night?"·夜":"·拂晓奇袭"):"";
-    const desc=`${n.name}之战（${PERIODS[eph].n}·${e.mode}${tw}${this.weather!=="晴"?"·"+this.weather:""}）：${r.reason==="目标达成撤出"&&bt.retreatSide?this.sideName(map[bt.retreatSide.name])+"目标达成，撤出":(wC?this.sideName(wC)+"胜·"+r.reason:"相持")}；${this.sideName(e.att)}损 ${Math.round(r.A.loss*100)}%，${this.sideName(e.def)}损 ${Math.round(r.B.loss*100)}%${r.A.burnt>0.01||r.B.burnt>0.01?`；焚辎重 ${Math.round(Math.max(r.A.burnt,r.B.burnt)*100)}%`:""}`;
+    const span=Math.max(1,bt.periodsUsed||1); for(const cs of ["A","B"]) for(const id of e.armies[cs]){ const a=this.army(id); if(a) a.busy=this.tick+span; }   // 交战实占的时段（战斗时钟精确交回）
+    const endPh=(e.ph??this.ph)+span-1, endDay=this.day+Math.floor(endPh/6); for(let d=this.day+1;d<=endDay;d++) this.fought[e.node]=Math.max(this.fought[e.node]||0,d);   // 跨日之战：次日不再另开一战
+    const eph=e.ph??this.ph, tw=e.night?(PERIODS[eph].night?"·夜":"·拂晓奇袭"):"", tEnd=PERIODS[(eph+span-1)%6].n, tSpan=span>1?`${PERIODS[eph].n}至${(eph+span-1)>=6?"次日":""}${tEnd}`:PERIODS[eph].n;
+    const desc=`${n.name}之战（${tSpan}·${e.mode}${tw}${this.weather!=="晴"?"·"+this.weather:""}）：${r.reason==="目标达成撤出"&&bt.retreatSide?this.sideName(map[bt.retreatSide.name])+"目标达成，撤出":(wC?this.sideName(wC)+"胜·"+r.reason:"相持")}；${this.sideName(e.att)}损 ${Math.round(r.A.loss*100)}%，${this.sideName(e.def)}损 ${Math.round(r.B.loss*100)}%${r.A.burnt>0.01||r.B.burnt>0.01?`；焚辎重 ${Math.round(Math.max(r.A.burnt,r.B.burnt)*100)}%`:""}`;
     this.note(desc,"battle");
     const menOf=cs=>e.armies[cs].reduce((t,id)=>t+this.combatUnits(this.army(id)).reduce((q,u)=>q+u.men,0),0);
     this.battles.push({day:this.day,ph:e.ph??this.ph,met:!!e.met,node:e.node,place:n.name,mode:e.mode,night:e.night,weather:this.weather,att:e.att,def:e.def,armies:{A:e.armies.A.map(id=>this.army(id).name),B:e.armies.B.map(id=>this.army(id).name)},
@@ -2910,6 +2958,7 @@ const PRESETS=[
 ];
 const SIDE_NAME={A:"甲军",B:"乙军"}; window.campLink=null;
 for(const p of PRESETS){ if(!p.days) p.days=2; if(p.mode==="决战") p.days=Math.max(p.days,4); }
+const presetStart=p=>p.startPh??(p.night?5:1);   // 旧战例的"夜战"即前半夜开战
 PRESETS.splice(0,0,
   {name:"阵地战 · 进取之将强攻营垒",terrain:"平原",mode:"阵地",days:6,A:{cmd:75,roster:R({"刀盾兵":8,"长枪兵":4,"弓兵":4,"轻骑":2}),ai:{on:true,persona:"进取",forced:""}},B:{cmd:70,fort:2,roster:R({"刀盾兵":10,"长枪兵":4,"弓兵":4}),ai:{on:true,persona:"均衡",forced:""}}},
   {name:"阵地战 · 1.8万 攻 1.2万营垒",terrain:"平原",mode:"阵地",days:6,A:{cmd:75,roster:R({"刀盾兵":10,"长枪兵":4,"弓兵":4}),ai:{on:true,persona:"进取",forced:""}},B:{cmd:70,fort:2,roster:R({"刀盾兵":6,"长枪兵":3,"弓兵":3}),ai:{on:true,persona:"均衡",forced:""}}},
@@ -2960,6 +3009,8 @@ function buildSetup(){
   $("#mode-extra").addEventListener("input",e=>{ const k=e.target.dataset.k; if(!k) return; const [side,f]=k.split("."); spec[side][f]=+e.target.value; if(f==="food"&&!spec[side][f]&&!(spec.mode==="围城"&&side==="B")) delete spec[side][f]; custom(); syncSetup(); resetBattle(); });
   $("#days").oninput=e=>{spec.days=+e.target.value; $("#days-o").textContent=spec.days+"日"; custom(); resetBattle();};
   $("#weather").onchange=e=>{ spec.weather=e.target.value; custom(); resetBattle(); };
+  $("#startph").innerHTML=PERIODS.map((p,i)=>`<option value="${i}">${p.n}（${p.t}）${p.night?" · 夜战":""}</option>`).join("");
+  $("#startph").onchange=e=>{ spec.startPh=+e.target.value; custom(); resetBattle(); };
   $("#night").onchange=e=>{ spec.night=e.target.checked; custom(); resetBattle(); };
   $("#hold").oninput=e=>{spec.hold=+e.target.value; $("#hold-o").textContent=spec.hold; custom(); resetBattle();};
   for(const s of ["A","B"]){
@@ -3033,7 +3084,7 @@ function syncSetup(){
   else for(const i of $("#mode-extra").querySelectorAll("input")){ i.nextElementSibling.textContent=i.closest(".slider-row").querySelector("output").textContent; }
   for(const i of $("#mode-extra").querySelectorAll("input")){ const [side,f]=i.dataset.k.split("."); const v=spec[side][f]; i.nextElementSibling.textContent= f==="wall"?Math.round(v*100)+"%":f==="fort"?(v||0)+"级":f==="food"?(v?v+"日":"不计"):v+"具"; }
   $("#days").value=spec.days||1; $("#days-o").textContent=(spec.days||1)+"日";
-  $("#weather").value=spec.weather||"晴"; $("#night").checked=!!spec.night;
+  $("#weather").value=spec.weather||"晴"; $("#night").checked=!!spec.night; $("#startph").value=presetStart(spec);
   for(const s of ["A","B"]){ const m=spec[s].mission||{type:"rout",retreatAt:0,holdRounds:0}; $("#ms-"+s).value=m.type; $("#ra-"+s).value=Math.round((m.retreatAt||0)*100); $("#rao-"+s).textContent=m.retreatAt>0?Math.round(m.retreatAt*100)+"%":"不退"; $("#hr-"+s).value=m.holdRounds||0; $("#hro-"+s).textContent=m.holdRounds||"—"; }
   $("#hold").value=spec.hold||0; $("#hold-o").textContent=spec.hold||0; $("#hold-row").hidden= spec.mode!=="攻守";
   for(const s of ["A","B"]){
@@ -3117,7 +3168,7 @@ function renderBrief(){ const el=$("#brief"); if(!el||!battle) return; const b=b
       ${s.missionDone?`<dt>结果</dt><dd>${s.missionDone==="success"?"目标达成":"未达成"}</dd>`:""}</dl>${prog}</div></section>`; };
   el.innerHTML=`<section class="card"><h2>${cl?"战役战斗":"战例推演"} <span class="lbl">${cl?"第 "+cl.spec.campaign.day+" 日":""}</span></h2><div class="body">
     <dl class="brief-row"><dt>地点</dt><dd>${cl?cl.spec.campaign.nodeName:($("#preset").selectedOptions[0]||{}).textContent||"自定义"}</dd><dt>地形 / 模式</dt><dd>${spec.terrain} · ${b.mode}</dd>
-    <dt>天气</dt><dd>${b.weather}${b.night0?" · 夜战":""}</dd></dl>
+    <dt>天气</dt><dd>${b.weather}</dd><dt>开战</dt><dd>${PERIODS[b.startPh].n}${b.dawnRaid?"·拂晓奇袭":PERIODS[b.startPh].night?"·夜战":""}</dd></dl>
     ${cl?`<div class="controls" style="padding:0"><button class="btn${b.done?" primary":""}" id="b-camp-ret">${b.done?"返回战役 · 结算":"速决余下并返回战役"}</button></div>`:`<button class="linkbtn" data-goto="v-setup">在编辑器中调整兵力、目标与天气 →</button>`}</div></section>`+(window.cmdHTML?cmdHTML(b):"")+side(b.A)+side(b.B); }
 document.addEventListener("click",e=>{ const g=e.target.closest("[data-goto]"); if(g) showView(g.dataset.goto); });
 function render(){
@@ -3125,7 +3176,8 @@ function render(){
   fitSlot();
   renderSide(battle.A); renderSide(battle.B); renderHint();
   $("#rnd").textContent=battle.dayRound+(battle.days>1?"":"");
-  $("#day").textContent=`第${battle.day}日 / ${battle.days}`;
+  $("#day").textContent=`第${battle.day}日${battle.days>1?" / "+battle.days:""} · ${PERIODS[battle.ph].n}`;
+  $("#bph").innerHTML=PERIODS.map((p,i)=>`<span class="${i===battle.ph?"on":""}${p.night?" night":""}" title="${p.n} ${p.t}">${p.n.slice(-2,-1)==="半"?p.n[0]+"夜":p.n}</span>`).join("");
   $("#stage").textContent=battle.stage; $("#stage").dataset.s=battle.stage;
   renderWorks(battle.B,"worksB"); renderWorks(battle.A,"worksA"); renderDaily();
   const dep=battle.mode==="遭遇"&&battle.deploying;
@@ -3173,13 +3225,13 @@ function renderLog(){
 function pushLog(){
   const b=battle;
   for(const k of ["A","B"]){ const ai=b.tacticAIs&&b.tacticAIs[k]; if(!ai) continue;
-    for(const l of ai.log.slice(aiSeen[k])) logRows.push({tac:true,r:`${b.days>1?"D"+b.day+" ":""}${String(b.dayRound).padStart(2,"0")}·令`,h:`<span class="t${k}">${SIDE_NAME[k]}主将</span> ${l.text}`});
+    for(const l of ai.log.slice(aiSeen[k])) logRows.push({tac:true,r:`${b.days>1||b.day>1?"D"+b.day+" ":""}${PERIODS[b.roundPh??b.ph].n}${b.roundIdx||0}·令`,h:`<span class="t${k}">${SIDE_NAME[k]}主将</span> ${l.text}`});
     aiSeen[k]=ai.log.length; } const parts=b.events.map(e=>{const who=e.s?`<span class="t${e.s}">${SIDE_NAME[e.s]}</span> `:""; return e.big?`<span class="hl">${who.replace(/<[^>]+>/g,"")}${e.t}</span>`:who+e.t;});
   const sum=s=>{const f=s.units.filter(u=>!u.routed); const o=f.length?f.reduce((a,u)=>a+Math.max(0,u.orgp),0)/f.length:0; return `<span class="t${s.name}">${SIDE_NAME[s.name]}</span> 组织 ${pct(o)}`;};
-  const isNight=b.events.some(e=>e.night);
+  const isNight=b.events.some(e=>e.night)||PERIODS[b.roundPh??b.ph].night;
   const dep=b.mode==="遭遇"&&(b.deploying||b.events.some(e=>e.t.startsWith("展开")));
-  logRows.push({night:isNight, r:`${b.days>1?"D"+(isNight?b.day-1:b.day)+" ":""}${String(isNight?P.DAY_ROUNDS:b.dayRound).padStart(2,"0")}·${dep?"展":(b.phase===2&&b.climbing!=null&&b.climbing<0.999)?(b.climbing>0.02?"城":"登"):["远","近","刃"][b.phase]}`, h:(parts.length?parts.join("；")+"　":"")+`<span class="note">${sum(b.A)} · ${sum(b.B)}</span>`});
-  if(b.done){ const r=b.result(); logRows.push({r:"终", h:r.winner==="相持"?`第${b.day}日暮，两军各自收兵，相持不下。`:`<b>${SIDE_NAME[r.winner]}获胜</b>，${b.nightRetreat?"敌军夜遁，追击受夜色所限":"败军遭追击"}，损失系数 ${pct(b.pursuit)}。`}); }
+  logRows.push({night:isNight, r:`${b.days>1||b.day>1?"D"+b.day+" ":""}${PERIODS[b.roundPh??b.ph].n}${b.roundIdx||0}·${dep?"展":(b.phase===2&&b.climbing!=null&&b.climbing<0.999)?(b.climbing>0.02?"城":"登"):["远","近","刃"][b.phase]}`, h:(parts.length?parts.join("；")+"　":"")+`<span class="note">${sum(b.A)} · ${sum(b.B)}</span>`});
+  if(b.done){ const r=b.result(); logRows.push({r:"终", h:r.winner==="相持"?`第${b.day}日${PERIODS[b.ph].n}，${b.endReason&&b.endReason!=="期满对峙"?b.endReason:"两军各自收兵"}，相持不下。`:`<b>${SIDE_NAME[r.winner]}获胜</b>，${b.nightRetreat?"敌军夜遁，追击受夜色所限":"败军遭追击"}，损失系数 ${pct(b.pursuit)}。`}); }
 }
 const GOODF=new Set(["已登城头","城墙残破","我据工事","敌侧可乘","敌预备已尽","敌阵动摇","敌军追击脱节","敌军后撤","敌主将已退","敌将崩溃"]);
 function fxStr(m,onEnemy){ return MOD_KEYS.filter(([k])=>Math.abs((m[k]??1)-1)>0.001).map(([k,l])=>{ const v=m[k]; let good=(k==="orgTaken"||k==="stam")?v<1:v>1; if(onEnemy) good=!good; return `<span class="${good?"up":"dn"}">${l}×${v.toFixed(2)}</span>`; }).join(" "); }
@@ -3436,7 +3488,7 @@ const PGROUPS=[
   ["侧翼",[["FLANK_ATK","侧击攻击×"],["FLANK_ORG","侧击组织伤害×"],["FLANK_GUARD_CMD","统帅100护翼"],["FLANK_GUARD_RESERVE","预备队护翼"],["FLANK_GUARD_MAX","护翼上限"],["WING_COUNTER","被侧击部队转身反击率"]]],
   ["远程",[["RF_FAR","前阵·远距"],["RF_NEAR","前阵·接近"],["RF_MELEE","前阵·白刃"],["RR_FAR","后阵·远距"],["RR_NEAR","后阵·接近"],["RR_MELEE","后阵·白刃抛射"],["VOLLEY_MULT","弩齐射威力×"],["ROTATE_FIRE_CMD","弩轮射所需统帅"],["ROTATE_FIRE_MULT","轮射每回合×"],["NO_RANGED_FIRE","无远程：对射挨打×"],["NO_RANGED_MELEE","无远程：白刃×"]]],
   ["骑兵",[["ANTI_CAV_MULT","冲击正面枪阵×"],["ANTI_CAV_FLANK_MULT","冲击侧面枪阵×"],["ANTI_CAV_MELEE","长枪白刃对骑×"],["ANTI_CAV_PIERCE","长枪对骑破甲＋"],["LIGHT_CAV_EVADE","冲击轻骑×（规避）"],["SKIRMISH_EVADE","步兵反击轻骑命中×"],["SKIRMISH_EVADE_CAV","重骑追打轻骑×"],["SKIRMISH_MELEE","轻骑白刃输出×"],["SKIRMISH_RECHARGE","轻骑再冲间隔"],["SKIRMISH_WITHDRAW","轻骑脱离线"],["SKIRMISH_PURSUIT_TAKEN","轻骑被追击损失×"],["SKIRMISH_PURSUIT_POWER","轻骑追击力×"]]],
-  ["多日会战",[["DAY_ROUNDS","每日回合数"],["NIGHT_ORG","夜间组织度回复"],["NIGHT_STAM","夜间体力回复"],["NIGHT_RALLY","溃部收拢概率×统帅"],["NIGHT_RALLY_ORG","收拢后组织度"],["NIGHT_RALLY_LOSS","收拢时散失兵员"],["NIGHT_RETREAT_RATIO","战力低于对方此比例则夜遁"],["NIGHT_PURSUIT","夜遁追击损失×"]]],
+  ["时段与多日会战",[["PH_ROUNDS_DAY","清晨/上午/下午每时段回合"],["PH_ROUNDS_DUSK","傍晚回合"],["PH_ROUNDS_NIGHT","夜间每时段回合"],["NIGHT_ORG","夜间组织度回复"],["NIGHT_STAM","夜间体力回复"],["NIGHT_RALLY","溃部收拢概率×统帅"],["NIGHT_RALLY_ORG","收拢后组织度"],["NIGHT_RALLY_LOSS","收拢时散失兵员"],["NIGHT_RETREAT_RATIO","战力低于对方此比例则夜遁"],["NIGHT_PURSUIT","夜遁追击损失×"]]],
   ["遭遇战",[["ENC_DEPLOY_BASE","展开耗时基数（÷速度）"],["ENC_CMD_SPEED","统帅加快展开"],["ENC_RAID","骑兵突袭行军队列倾向"],["ENC_ABSORB","行军队列抵挡×"],["ENC_ORG","行军队列组织伤害×"]]],
   ["阵地与围城",[["FORT_ABSORB","营垒每级：阵坚+"],["FORT_ATK","营垒每级：敌白刃-"],["FORT_CHARGE","营垒每级：冲击-"],["FORT_BUILD_NIGHT","筑垒一夜进度"],["WALL_ABSORB","城墙：阵坚×(1+x·W)"],["WALL_ATK","城墙完好时攻方白刃×"],["WALL_CLIMB","蚁附登城组织伤害+"],["WALL_WIDTH_MIN","城墙完好时可展开正面"],["ENGINE_DMG","每具器械每回合损城"],["ENGINE_ASSAULT_DMG","强攻时器械损城比例"],["WALL_REPAIR","守方每夜修城"],["STARVE_ORG","断粮每日组织打击"]]],
   ["蚁附登城（城墙只受器械损伤）",[["CLIMB_SHOT","守方矢石对登城者×(1+x·W)"],["CLIMB_ABSORB","登城者抵挡×(1-x·W)"],["CLIMB_MEN","登城者兵员伤亡×(1+x·W)"],["CLIMB_STAM","登城者体力消耗×"],["CLIMB_CAV","骑兵对城上白刃×"],["CLIMB_RATE","每回合登城进度基数"],["CLIMB_REPEL","守方每回合击退"],["CLIMB_BREACH","先登后城墙加成×(1-x·进度)"],["CLIMB_GAP_W","城墙低于此值出现缺口可白刃"],["CLIMB_STONE","未登城：守军擂石推梯×白刃攻击"],["CLIMB_RESERVE","守方有预备队时击退×"]]],
@@ -3867,7 +3919,7 @@ function endCampBattle(){ const cl=window.campLink; if(!cl) return;
 document.addEventListener("click",e=>{ if(e.target.id==="b-camp-ret") endCampBattle(); });
 
 /* 战役编辑（编辑器 · 战役编辑） */
-const CP_LABELS=[["STRAT_VISION","战略视野（日程）"],["STRAT_NOISE","敌情估计误差"],["STRAT_LAG","迟疑上限（×(1−统帅)）"],["RAID_INT","谋划截粮所需智略"],["FORESIGHT_INT","预设防备/择天时所需智略"],["SPY_INT","探知敌粮所需智略"],["COUNTER_INT","低于此智略可能围魏救赵"],["COUNTER_P","围魏救赵误判倾向"],["WITHDRAW_FOOD","前线粮少于此日数议退兵"],["STARVE_COLLAPSE","断粮满此日数全军溃散"],["CONVOY_LOAD","运粮每趟装粮"],["BURN_TRIGGER","烧粮仓：一次焚此比例即军心大震"],["BURN_ORG","烧粮仓：组织打击（×严重度）"],["BURN_FAR","烧粮仓：不就食该仓者打击折扣"],["BURN_DESERT","烧粮仓：逃亡比例"],["BURN_SEV_BASE","烧粮仓：严重度基数"],["BURN_SEV_SHARE","烧粮仓：严重度×焚粮占全军存粮比"],["SHAKEN_DAYS","军心动摇日数"],["SHAKEN_REC","动摇期夜间恢复减少"],["SHAKEN_CAP","动摇期组织上限"],["SHAKEN_FLEE","动摇时主力议退倾向"],["EXPLOIT_RATIO","乘乱击之所需兵力比"],["CUT_ORG","截粮：运粮被截过半组织小挫"],["FIRE_INT","谋划火攻所需智略"],["FIRE_BASE","火攻：火势基数"],["FIRE_ORG","火攻：被焚营组织打击"],["FIRE_MEN","火攻：被焚营伤亡"],["FIRE_FORT","火攻：营垒毁损"],["FIRE_SPREAD","火攻：蔓延概率（×火势）"],["FIRE_SHOCK_CAMPS","连焚此数营则全军大震"],["WX_PERSIST","天气延续概率"],["SUPPLY_RANGE","就粮距离（日）"],["FOOD_CAP_DAYS","随军粮草上限（日）"],["EAT_PER_10","每 10 部每日食粮"],["RAID_GOAL","截粮焚毁目标比例"],["RAID_UNGUARDED","无守粮仓每日被焚比例"],["STARVE_ORG","断粮每日组织打击"],["STARVE_MEN","断粮每日减员"],["NIGHT_ORG","夜间组织恢复"],["RALLY","溃部收拢概率"],["CAMP_BUILD","驻敌前每日筑营"],["ASSAULT_RATIO","AI 强攻所需战力比"],["ASSAULT_P","AI 试攻城垒概率"],["STANDOFF_LOSS","对垒之日零星伤亡"],["SCOUT_P","斥候发现袭粮之敌概率"],["DEPOT_UNITS_PER","每多少存粮化为一部粮垛"],["LATE_ENGAGE_PH","过此时段抵达敌前则次日清晨再战（0后半夜…5前半夜）"],["NIGHT_ROUNDS","夜战回合数"],["NEAR_DAYS","敌军距此（日）以内即报敌情"]];
+const CP_LABELS=[["STRAT_VISION","战略视野（日程）"],["STRAT_NOISE","敌情估计误差"],["STRAT_LAG","迟疑上限（×(1−统帅)）"],["RAID_INT","谋划截粮所需智略"],["FORESIGHT_INT","预设防备/择天时所需智略"],["SPY_INT","探知敌粮所需智略"],["COUNTER_INT","低于此智略可能围魏救赵"],["COUNTER_P","围魏救赵误判倾向"],["WITHDRAW_FOOD","前线粮少于此日数议退兵"],["STARVE_COLLAPSE","断粮满此日数全军溃散"],["CONVOY_LOAD","运粮每趟装粮"],["BURN_TRIGGER","烧粮仓：一次焚此比例即军心大震"],["BURN_ORG","烧粮仓：组织打击（×严重度）"],["BURN_FAR","烧粮仓：不就食该仓者打击折扣"],["BURN_DESERT","烧粮仓：逃亡比例"],["BURN_SEV_BASE","烧粮仓：严重度基数"],["BURN_SEV_SHARE","烧粮仓：严重度×焚粮占全军存粮比"],["SHAKEN_DAYS","军心动摇日数"],["SHAKEN_REC","动摇期夜间恢复减少"],["SHAKEN_CAP","动摇期组织上限"],["SHAKEN_FLEE","动摇时主力议退倾向"],["EXPLOIT_RATIO","乘乱击之所需兵力比"],["CUT_ORG","截粮：运粮被截过半组织小挫"],["FIRE_INT","谋划火攻所需智略"],["FIRE_BASE","火攻：火势基数"],["FIRE_ORG","火攻：被焚营组织打击"],["FIRE_MEN","火攻：被焚营伤亡"],["FIRE_FORT","火攻：营垒毁损"],["FIRE_SPREAD","火攻：蔓延概率（×火势）"],["FIRE_SHOCK_CAMPS","连焚此数营则全军大震"],["WX_PERSIST","天气延续概率"],["SUPPLY_RANGE","就粮距离（日）"],["FOOD_CAP_DAYS","随军粮草上限（日）"],["EAT_PER_10","每 10 部每日食粮"],["RAID_GOAL","截粮焚毁目标比例"],["RAID_UNGUARDED","无守粮仓每日被焚比例"],["STARVE_ORG","断粮每日组织打击"],["STARVE_MEN","断粮每日减员"],["NIGHT_ORG","夜间组织恢复"],["RALLY","溃部收拢概率"],["CAMP_BUILD","驻敌前每日筑营"],["ASSAULT_RATIO","AI 强攻所需战力比"],["ASSAULT_P","AI 试攻城垒概率"],["STANDOFF_LOSS","对垒之日零星伤亡"],["SCOUT_P","斥候发现袭粮之敌概率"],["DEPOT_UNITS_PER","每多少存粮化为一部粮垛"],["LATE_ENGAGE_PH","过此时段抵达敌前则次日清晨再战（0后半夜…5前半夜）"],["NEAR_DAYS","敌军距此（日）以内即报敌情"]];
 const AN_TYPE={posture:"相持姿态",weather:"天时",intel:"情报",order:"军令",decision:"抉择",luck:"战运",defect:"倒戈",morale:"军心"};
 function anWhen(a){ return [a.day!=null?`第 ${a.day} 日起`:"",a.until!=null?`至第 ${a.until} 日`:"",a.node?`于${(CAMP_SCENARIOS[campCfg.scenario].nodes[a.node]||{}).name||a.node}`:"",a.trigger?({depotLost:"粮仓失"}[a.trigger.split(":")[0]]||a.trigger.split(":")[0])+(a.trigger.split(":")[1]?`·${(CAMP_SCENARIOS[campCfg.scenario].nodes[a.trigger.split(":")[1]]||{}).name||""}${a.trigger.split(":")[2]?Math.round(a.trigger.split(":")[2]*100)+"%":""}`:""):""].filter(Boolean).join(" "); }
 function anEffect(a){ const sc=CAMP_SCENARIOS[campCfg.scenario], an=id=>{ const x=sc.armies.find(q=>q.id===id); return x?x.name.split(" · ")[0]:id; }, sn=s=>sc.sides[s]?sc.sides[s].name:s, nn=n=>(sc.nodes[n]||{}).name||n;
@@ -4449,7 +4501,7 @@ function renderBLobby(){
     </div></section>
     <section class="card"><h2>战例 <span class="lbl">${p.mode}战</span></h2><div class="body">
       <p class="lobby-title">${esc(t1)}</p>${t2?`<div class="note">${esc(t2)}</div>`:""}
-      <dl class="kv"><dt>地形</dt><dd>${p.terrain}</dd><dt>会战模式</dt><dd>${p.mode}</dd><dt>预定日数</dt><dd>${p.days||1} 日</dd><dt>天气</dt><dd>${p.weather||"晴"}${p.night?" · 夜战":""}</dd></dl>
+      <dl class="kv"><dt>地形</dt><dd>${p.terrain}</dd><dt>会战模式</dt><dd>${p.mode}</dd><dt>预定日数</dt><dd>${p.days||1} 日</dd><dt>天气</dt><dd>${p.weather||"晴"}</dd><dt>开战</dt><dd>${PERIODS[presetStart(p)].n}${PERIODS[presetStart(p)].night?" · 夜战":""}</dd></dl>
       <div class="note">${MODE_BRIEF[p.mode]||""}</div>
       <div class="vs">${vsSide("A")}<span class="vs-x">對</span>${vsSide("B")}</div>
       <div><div class="lbl">你的指挥</div><div class="seg" id="bl-side">${segBtns("s",[["A","甲军"],["B","乙军"],["","观战"]],PLAY.pref)}</div></div>
