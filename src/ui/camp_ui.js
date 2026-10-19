@@ -1,7 +1,8 @@
 /* ================= 战役界面 ================= */
 let camp=null, campSel=null, campPick=false, savedSpec=null;
-const CAMP_KEY="hm-camp-v2", CAMP_CFG_KEY="hm-camp-cfg-v1";
-let campCfg={scenario:"GUANDU",control:{A:"player",B:"ai"},autoStandoff:true,history:false,tendency:0.7,seed:""};
+const CAMP_KEY="hm-camp-v3", CAMP_CFG_KEY="hm-camp-cfg-v1";
+const PAUSE_KINDS=[["contact","接敌交战"],["depot","粮仓、运粮被袭"],["arrive","军团抵达目的地"],["sight","敌军进入视野"],["shaken","军心动摇"],["hist","史实之机"]];
+let campCfg={scenario:"GUANDU",control:{A:"player",B:"ai"},autoStandoff:true,history:false,tendency:0.7,seed:"",pause:{}};
 try{ const c=JSON.parse(localStorage.getItem(CAMP_CFG_KEY)||"null"); if(c) campCfg={...campCfg,...c}; }catch(e){}
 try{ const cp=JSON.parse(localStorage.getItem("hm-camp-cp2")||"null"); if(cp) Object.assign(CP,cp); }catch(e){}
 const CP_DEFAULT={...CP};
@@ -9,6 +10,7 @@ const SC_KEY="hm-camp-sc4";
 const CAMP_SC_DEFAULT=JSON.parse(JSON.stringify(CAMP_SCENARIOS));
 try{ const ed=JSON.parse(localStorage.getItem(SC_KEY)||"null"); if(ed) for(const k in ed) if(ed[k]&&ed[k].nodes) CAMP_SCENARIOS[k]=ed[k]; }catch(e){}
 if(!CAMP_SCENARIOS[campCfg.scenario]) campCfg.scenario="GUANDU";
+for(const [k] of PAUSE_KINDS) if(campCfg.pause[k]==null) campCfg.pause[k]=true;
 function campSave(){ try{ localStorage.setItem(CAMP_KEY,camp.save()); }catch(e){} }
 function campOpts(extra={}){ return {control:{...campCfg.control},history:!!campCfg.history,tendency:+campCfg.tendency,seed:campCfg.seed===""?undefined:+campCfg.seed,...extra}; }
 function campNew(extra){ camp=new Campaign(CAMP_SCENARIOS[campCfg.scenario],campOpts(extra)); campSel=null; campSave(); renderCamp(); }
@@ -19,15 +21,16 @@ $("#v-camp").innerHTML=`<div class="camp-grid">
   <section class="card cp-left"><h2><span id="cp-title">战役</span><span class="lbl" id="cp-day"></span></h2><div class="body">
     <div class="note" id="cp-date"></div>
     <div class="cp-wx" id="cp-wx"></div>
-    <div class="toolbar"><button class="btn primary" id="cp-next">推进一日</button><button class="btn" id="cp-report-btn">战役报告</button><span class="sp"></span><button class="btn" id="cp-lobby" title="回到开局：换剧本、换阵营或继续本局">← 开局</button></div>
-    <div class="cp-auto" id="cp-autorow" hidden><button class="btn primary" id="cp-auto" title="双方由战略 AI 指挥，自动逐日推演到战役结束，结束后弹出战役报告">自动推演</button>
-      <label class="note">速度<select id="cp-auto-spd" aria-label="推演速度"><option value="900">慢</option><option value="350" selected>中</option><option value="80">快</option><option value="0">瞬时</option></select></label></div>
+    <div class="ph-bar" id="cp-ph" aria-label="时段"></div>
+    <div class="toolbar"><button class="btn" id="cp-step" title="推进一个时段（约四个时辰）">一时段</button><button class="btn primary" id="cp-next" title="推进到次日；遇设定的要事暂停">推进一日</button><button class="btn" id="cp-auto" title="自动逐时段推进，遇设定的要事暂停">▶ 自动</button></div>
+    <div class="toolbar"><label class="note" title="自动推进速度">速度 <select id="cp-auto-spd" aria-label="自动推进速度"><option value="700">慢</option><option value="260" selected>中</option><option value="60">快</option><option value="0">瞬时</option></select></label><button class="btn" id="cp-report-btn">战役报告</button><button class="btn" id="cp-lobby" title="回到开局：换剧本、换阵营或继续本局">← 开局</button><details class="cp-pausecfg"><summary class="lbl">暂停条件</summary><div class="cp-pausebox">${PAUSE_KINDS.map(([k,l])=>`<label class="chk"><input type="checkbox" data-pause="${k}" ${campCfg.pause[k]!==false?"checked":""}> ${l}</label>`).join("")}<div class="note">只看你指挥的一方；观战时不暂停。</div></div></details></div>
+    <div class="cp-pause" id="cp-pause" hidden></div>
     <div id="cp-lords" class="cp-lords"></div>
     <div id="cp-pending"></div>
     <div class="lbl" style="margin-top:4px">军团（点选后下达目标）</div><div id="cp-armies" class="cp-armies"></div>
     <div id="cp-orders"></div></div></section>
   <section class="card cp-mapcard"><div class="cp-map" id="cp-map"><svg id="cp-svg" class="cmap" viewBox="0 0 1000 800" role="img" aria-label="战役地图"></svg></div>
-    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>实心箭头：进军 · 空心虚线箭头：撤退</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
+    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>大箭头：受令去向（实心进军、空心虚线撤退）</span><span>小尖头：当下一步</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
   <div class="cp-report" id="cp-report" hidden></div>
   <section class="card cp-right"><h2>情报 <span class="lbl">军报</span></h2><div class="body"><div id="cp-info"></div><div class="lbl">战役日志（最新在上）</div><div class="log cp-log" id="cp-log"></div></div></section>
 </div>`;
@@ -41,15 +44,15 @@ function canCommand(a){ return camp.control[a.side]==="player"&&!a.gone; }
 function renderCamp(){
   if(!camp) return; const c=camp;
   $("#cp-title").textContent=c.name; const dt=c.hist&&c.hist.startDate?c.dateOf(c.day):null;
-  $("#cp-day").textContent=`第 ${c.day} 日`;
+  $("#cp-day").textContent=`第 ${c.day} 日 · ${PERIODS[c.ph].n}`;
+  $("#cp-ph").innerHTML=PERIODS.map((p,i)=>`<span class="${i<c.ph?"done":i===c.ph?"on":""}${p.night?" night":""}" title="${p.n} ${p.t}${i===c.ph?"（下一时段）":""}">${p.n}</span>`).join("");
   $("#cp-date").innerHTML=`${dt?dt.y+dt.mn+"月"+dt.d:c.season}`+(c.hist&&c.hist.on?` <span class="histbadge" title="历史模式：随机按史实倾向被推向史实；同种子可完全重演">史 · 倾向 ${Math.round(c.hist.tend*100)}% · 种子 ${c.seed}</span>`:` <span class="note" title="随机种子：同种子同设置可重演">种子 ${c.seed}</span>`);
   const wxDesc={晴:"晴：诸事如常",雨:"雨：弓弩减力、不能纵火、行军泥泞",大风:"大风：火势大盛，利于焚粮",雾:"雾：远射难中，计谋易成",雪:"雪：体力大耗、冲击减弱",酷暑:"酷暑：体力大耗"};
   $("#cp-wx").innerHTML=`<span class="wxi">${c.weather}</span><span class="note">${wxDesc[c.weather]||""}</span>`;
   if(c.over) $("#cp-wx").innerHTML+=`<div class="cp-over">${c.over.side?c.sideName(c.over.side)+"胜：":""}${c.over.text}</div>`;
-  $("#cp-next").disabled=!!c.over||c.pending.some(e=>!e.done);
-  $("#cp-autorow").hidden=!(c.control.A==="ai"&&c.control.B==="ai");
+  const busy=!!c.over||c.pending.some(e=>!e.done); for(const id of ["#cp-next","#cp-step","#cp-auto"]) $(id).disabled=busy&&!(id==="#cp-auto"&&campAuto);
   // 交战
-  const pend=c.pending; $("#cp-pending").innerHTML=pend.length?`<div class="lbl">今日交战</div>`+pend.map((e,i)=>{ const n=c.nodes[e.node]; const nm=s=>e.armies[s].map(id=>c.army(id).name.split(" · ")[0]).join("、");
+  const pend=c.pending; $("#cp-pending").innerHTML=pend.length?`<div class="lbl">${PERIODS[c.ph].n}交战</div>`+pend.map((e,i)=>{ const n=c.nodes[e.node]; const nm=s=>e.armies[s].map(id=>c.army(id).name.split(" · ")[0]).join("、");
     const att=e.att, def=e.def; const playerAtt=c.control[att]==="player";
     return `<div class="cp-eng ${e.done?"done":""}"><div><b>⚔ ${n.name}</b> <span class="note">${e.mode}${e.night?"·夜":""}${c.weather!=="晴"?"·"+c.weather:""}</span></div>
       <div class="note">${c.sideName(att)}（${nm(att)}）攻 ${c.sideName(def)}（${nm(def)}）</div>
@@ -59,7 +62,7 @@ function renderCamp(){
   const sides=["A","B"]; $("#cp-armies").innerHTML=sides.map(s=>`<div class="cp-side ${s.toLowerCase()}"><div class="lbl">${c.sideName(s)}${c.control[s]==="player"?"（玩家）":"（AI）"}</div>`+c.armies.filter(a=>a.side===s).map(a=>`<button type="button" class="cp-army ${a.id===campSel?"on":""} ${a.gone?"gone":""}" data-army="${a.id}"><span class="chip">${c.sideInfo[s].short}</span><span class="nm">${a.name}</span><span class="st">${armyStatus(a)}</span><span class="gl">${armyGlyphs(a)} · 粮 ${a.food!=null?a.food.toFixed(1):"—"}${a.cargo>0?" · 载粮 "+Math.round(a.cargo):""}${a.shaken>0&&!a.gone?` · <b class="shaken">军心动摇 ${a.shaken} 日</b>`:""}</span></button>`).join("")+"</div>").join("");
   $("#cp-lords").innerHTML=lordHTML("A")+lordHTML("B");
   renderOrders(); renderCampMap(); renderCampInfo();
-  $("#cp-log").innerHTML=`<table><tbody>${c.log.slice().reverse().slice(0,160).map(l=>`<tr class="${l.kind==="hist"?"shi":l.kind}"><td>D${l.day}</td><td>${l.t}</td></tr>`).join("")}</tbody></table>`;
+  $("#cp-log").innerHTML=`<table><tbody>${c.log.slice().reverse().slice(0,160).map(l=>`<tr class="${l.kind==="hist"?"shi":l.kind}"><td>D${l.day}${l.ph!=null?"·"+PERIODS[l.ph].n:""}</td><td>${l.t}</td></tr>`).join("")}</tbody></table>`;
 }
 function renderOrders(){
   const el=$("#cp-orders"), a=campSel&&camp.army(campSel); if(!a){ el.innerHTML='<p class="note">点选左侧或地图上的军团查看；己方军团可下达目标：选目标类型，再在地图上点选目的地。</p>'; return; }
@@ -96,13 +99,15 @@ function renderCampMap(){
   const c=camp, N=c.nodes; let h=mapBaseSVG({sc:c.sc,nodes:N,edges:c.edges,interactive:true,pick:campPick});
   for(const e of c.pending) if(!e.done){ const n=N[e.node]; h+=`<text x="${n.x+18}" y="${n.y-16}" class="cp-x">⚔</text>`; }
   // 进军箭头：画在最上层（玩家扮演甲方时，不显示乙方未被选中的路线）
-  let arrows="";
+  let arrows="", steps="";
   for(const a of c.armies){ if(a.gone||!a.path.length) continue; if(c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B") continue;
-    const d=marchArrow([a.at,...a.path],N); if(d) arrows+=`<path d="${d}" class="cp-march ${a.side.toLowerCase()}${a.mission.type==="retreat"?" retreat":""} ${a.id===campSel?"on":""}"/>`; }
+    const sd=a.side.toLowerCase(), rt=a.mission.type==="retreat"?" retreat":"";
+    if(a.order&&a.order.seq.length>1){ const d=marchArrow(a.order.seq,N); if(d) arrows+=`<path d="${d}" class="cp-march ${sd}${rt} ${a.id===campSel?"on":""}"><title>${esc(a.name)}：第 ${a.order.day} 日${PERIODS[a.order.ph].n}受令</title></path>`; }   // 示意大箭头：下令时定格
+    const st=stepArrow(c,a.at,a.path[0],a.prog); if(st) steps+=`<path d="${st}" class="cp-step ${sd}"/>`; }   // 小尖头：当下这一步，逐时段更新
   const flags=c.armies.filter(a=>!a.gone).map(a=>{ const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), p=armyXY(N,a.at,a.path[0],a.prog,a.path[0]?c.edge(a.at,a.path[0]).d:1);
     return {...p,side:a.side,gen:a.gen.name,name:a.name,id:a.id,n:cus.length,men,ratio:men/(a.men0||men||1),org:cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0,
       shaken:a.shaken>0,tag:MISSION_TAG[a.mission.type],cargo:a.cargo>0,on:a.id===campSel}; });
-  h+=flagsSVG(flags,{interactive:true})+`<g class="cp-arrows" aria-hidden="true">${arrows}</g>`;
+  h+=flagsSVG(flags,{interactive:true})+`<g class="cp-arrows" aria-hidden="true">${arrows}${steps}</g>`;
   $("#cp-svg").innerHTML=h;
 }
 /* 交互 */
@@ -114,7 +119,8 @@ $("#v-camp").addEventListener("click",e=>{
   const eb=e.target.closest("[data-eng]"); if(eb){ const eg=camp.pending[+eb.dataset.eng]; const act=eb.dataset.act;
     if(act==="auto"){ camp.resolveAuto(eg); afterEngagement(); } else if(act==="standoff"){ camp.standoffDay(eg); afterEngagement(); } else if(act==="play") playEngagement(eg); return; }
   if(e.target.id==="cp-autoall"){ for(const eg of camp.pending) if(!eg.done) camp.resolveAuto(eg); afterEngagement(); return; }
-  if(e.target.id==="cp-next"){ campAutoStop(); campNextDay(); return; }
+  if(e.target.id==="cp-next"){ campAutoStop(); campAdvance("day"); return; }
+  if(e.target.id==="cp-step"){ campAutoStop(); campAdvance("period"); return; }
   if(e.target.closest("#cp-auto")){ if(campAuto) campAutoStop(); else campAutoStart(); return; }
   if(e.target.id==="cp-lobby"){ campAutoStop(); window.PLAY&&(PLAY.campIn=false); showView("v-camp"); return; }
   if(e.target.id==="cp-restart"){ campAutoStop(); $("#cp-report").hidden=true; campNew({control:{...camp.control}}); return; }
@@ -126,28 +132,38 @@ $("#v-camp").addEventListener("click",e=>{
       camp.note(`${ar.name}：${MISSION_NAME[a.mission]}${a.target?camp.nodes[a.target].name:""}（从史）`,"order"); campSave(); renderCamp(); } return; }
   const ad=e.target.closest("[data-adopt]"); if(ad){ const [s,i]=ad.dataset.adopt.split(":"); const st=camp.strat[s]; const o=st.adv&&st.adv.list[+i]; if(o){ st.exec(o); st.intent=o.text; st.intentSet=true; st.adv=null; campSave(); renderCamp(); } return; }
 });
+$("#v-camp").addEventListener("change",e=>{ const k=e.target.dataset&&e.target.dataset.pause; if(!k) return; campCfg.pause[k]=e.target.checked; try{ localStorage.setItem(CAMP_CFG_KEY,JSON.stringify(campCfg)); }catch(x){} });
 $("#v-camp").addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.closest("[data-node],[data-army]")){ e.preventDefault(); e.target.dispatchEvent(new MouseEvent("click",{bubbles:true})); } });
 /* ===== AI 一键推演：双方交由战略 AI，逐日自动推进（可调速、可中止） ===== */
 let campAuto=null;
-function campAutoStop(){ if(campAuto){ clearTimeout(campAuto.t); campAuto=null; } const b=$("#cp-auto"); if(b){ b.textContent="自动推演"; b.classList.add("primary"); } }
+/* ===== 推进：一时段 / 一日 / 自动；遇设定的要事（只看玩家一方）暂停 ===== */
+function campAutoStop(){ if(campAuto){ clearTimeout(campAuto.t); campAuto=null; } const b=$("#cp-auto"); if(b){ b.textContent="▶ 自动"; b.classList.remove("primary"); } }
+function pauseHits(){ const ps=["A","B"].filter(s=>camp.control[s]==="player"); return camp.alerts.filter(a=>ps.includes(a.side)&&campCfg.pause[a.kind]!==false); }
+function showPause(hits){ const el=$("#cp-pause"); if(!el) return; if(!hits||!hits.length){ el.hidden=true; return; }
+  const seen=new Set(), rows=hits.filter(h=>!seen.has(h.text)&&seen.add(h.text)).slice(0,6);
+  el.hidden=false; el.innerHTML=`<b>暂停 · 第 ${rows[0].day} 日${PERIODS[rows[0].ph].n}</b>${rows.map(h=>`<div>${(PAUSE_KINDS.find(k=>k[0]===h.kind)||[,""])[1]}：${h.text}</div>`).join("")}`; }
+/* 走一个时段：AI 方与对垒之战即时速决；玩家参与的交战留待亲自指挥或速决（返回 "engage"）；遇要事返回 "pause" */
+function runPeriod(){ if(camp.over) return "over"; const d=camp.day, eng=camp.beginPeriod();
+  for(const e of eng){ const playerIn=["A","B"].some(s=>camp.control[s]==="player"&&e.armies[s].length); if(e.standoff||!playerIn) camp.resolveAuto(e); }
+  if(eng.some(e=>!e.done)){ showPause(pauseHits()); return "engage"; }
+  camp.endPeriod(); if(camp.day!==d) for(const s of ["A","B"]) camp.strat[s].intentSet=false;
+  const hits=pauseHits(); if(hits.length){ showPause(hits); return "pause"; } return camp.over?"over":"ok"; }
+function campFinish(){ campSave(); renderCamp(); if(camp.over&&!camp.reported){ camp.reported=true; openReport(); } }
+function campAdvance(unit){ if(camp.over||camp.pending.some(e=>!e.done)) return; showPause(null); const d=camp.day; let r, n=0;
+  do{ r=runPeriod(); } while(unit==="day"&&r==="ok"&&camp.day===d&&n++<12);
+  campFinish(); }
 function campAutoStart(){
-  if(camp.over){ camp=new Campaign(CAMP_SCENARIOS[campCfg.scenario],campOpts({control:{A:"ai",B:"ai"}})); campSel=null; }
-  else if(["A","B"].some(s=>camp.control[s]!=="ai")){ for(const s of ["A","B"]) camp.control[s]="ai"; camp.note("双方交由 AI 指挥，自动推演","order"); }
+  if(camp.over){ camp=new Campaign(CAMP_SCENARIOS[campCfg.scenario],campOpts({control:{...camp.control}})); campSel=null; }
   if(window.campLink) return;   // 正在亲自指挥一场交战：先回到战役
-  const open=camp.pending.filter(e=>!e.done); if(open.length){ for(const e of open) camp.resolveAuto(e); camp.endDay(); }
-  camp.reported=false; const spd=+$("#cp-auto-spd").value;
-  if(spd===0){ let n=0; while(!camp.over&&n++<400){ campNextDay(true); } campSave(); renderCamp(); if(!camp.reported){ camp.reported=true; openReport(); } return; }
-  campAuto={}; const b=$("#cp-auto"); b.textContent="■ 停止推演"; b.classList.remove("primary");
-  const tick=()=>{ if(!campAuto) return; if(camp.over){ campAutoStop(); renderCamp(); return; } campNextDay(); campAuto&&(campAuto.t=setTimeout(tick,+$("#cp-auto-spd").value||0)); };
+  if(camp.pending.some(e=>!e.done)) return;
+  camp.reported=false; showPause(null); campAuto={}; const b=$("#cp-auto"); b.textContent="■ 暂停"; b.classList.add("primary");
+  const tick=()=>{ if(!campAuto) return; const spd=+$("#cp-auto-spd").value; let r, n=0;
+    do{ r=runPeriod(); } while(r==="ok"&&spd===0&&n++<36);   // 瞬时：每次走六日
+    if(r!=="ok"){ campAutoStop(); campFinish(); return; }
+    if(spd>0||n%36===0) renderCamp(); campAuto.t=setTimeout(tick,spd); };
   tick(); }
-function campNextDay(silent){ if(camp.over) return; const eng=camp.beginDay();
-  // AI 攻方已决定对垒不战的，直接结算；玩家参与的保留给玩家
-  for(const e of eng){ const playerIn=["A","B"].some(s=>camp.control[s]==="player"&&e.armies[s].length); if(e.standoff||(!playerIn)) camp.resolveAuto(e); }
-  if(!eng.some(e=>!e.done)) { camp.endDay(); campSave(); }
-  for(const s of ["A","B"]) camp.strat[s].intentSet=false;
-  if(silent) return;
-  renderCamp(); if(camp.over&&!camp.reported){ camp.reported=true; openReport(); } }
-function afterEngagement(){ if(camp.pending.length&&camp.pending.every(e=>e.done)){ camp.endDay(); } campSave(); renderCamp(); if(camp.over&&!camp.reported){ camp.reported=true; openReport(); } }
+/* 交战处理完毕：本时段终了；不自动续推，由玩家再按 */
+function afterEngagement(){ if(camp.pending.length&&camp.pending.every(e=>e.done)){ const d=camp.day; camp.endPeriod(); if(camp.day!==d) for(const s of ["A","B"]) camp.strat[s].intentSet=false; } campFinish(); }
 /* 亲自指挥：把战役交战载入战场 */
 function playEngagement(e){
   const sp=camp.battleSpec(e); if(!savedSpec) savedSpec=spec;
@@ -163,7 +179,7 @@ function endCampBattle(){ const cl=window.campLink; if(!cl) return;
 document.addEventListener("click",e=>{ if(e.target.id==="b-camp-ret") endCampBattle(); });
 
 /* 战役编辑（编辑器 · 战役编辑） */
-const CP_LABELS=[["STRAT_VISION","战略视野（日程）"],["STRAT_NOISE","敌情估计误差"],["STRAT_LAG","迟疑上限（×(1−统帅)）"],["RAID_INT","谋划截粮所需智略"],["FORESIGHT_INT","预设防备/择天时所需智略"],["SPY_INT","探知敌粮所需智略"],["COUNTER_INT","低于此智略可能围魏救赵"],["COUNTER_P","围魏救赵误判倾向"],["WITHDRAW_FOOD","前线粮少于此日数议退兵"],["STARVE_COLLAPSE","断粮满此日数全军溃散"],["CONVOY_LOAD","运粮每趟装粮"],["BURN_TRIGGER","烧粮仓：一次焚此比例即军心大震"],["BURN_ORG","烧粮仓：组织打击（×严重度）"],["BURN_FAR","烧粮仓：不就食该仓者打击折扣"],["BURN_DESERT","烧粮仓：逃亡比例"],["BURN_SEV_BASE","烧粮仓：严重度基数"],["BURN_SEV_SHARE","烧粮仓：严重度×焚粮占全军存粮比"],["SHAKEN_DAYS","军心动摇日数"],["SHAKEN_REC","动摇期夜间恢复减少"],["SHAKEN_CAP","动摇期组织上限"],["SHAKEN_FLEE","动摇时主力议退倾向"],["EXPLOIT_RATIO","乘乱击之所需兵力比"],["CUT_ORG","截粮：运粮被截过半组织小挫"],["FIRE_INT","谋划火攻所需智略"],["FIRE_BASE","火攻：火势基数"],["FIRE_ORG","火攻：被焚营组织打击"],["FIRE_MEN","火攻：被焚营伤亡"],["FIRE_FORT","火攻：营垒毁损"],["FIRE_SPREAD","火攻：蔓延概率（×火势）"],["FIRE_SHOCK_CAMPS","连焚此数营则全军大震"],["WX_PERSIST","天气延续概率"],["SUPPLY_RANGE","就粮距离（日）"],["FOOD_CAP_DAYS","随军粮草上限（日）"],["EAT_PER_10","每 10 部每日食粮"],["RAID_GOAL","截粮焚毁目标比例"],["RAID_UNGUARDED","无守粮仓每日被焚比例"],["STARVE_ORG","断粮每日组织打击"],["STARVE_MEN","断粮每日减员"],["NIGHT_ORG","夜间组织恢复"],["RALLY","溃部收拢概率"],["CAMP_BUILD","驻敌前每日筑营"],["ASSAULT_RATIO","AI 强攻所需战力比"],["ASSAULT_P","AI 试攻城垒概率"],["STANDOFF_LOSS","对垒之日零星伤亡"],["SCOUT_P","斥候发现袭粮之敌概率"],["DEPOT_UNITS_PER","每多少存粮化为一部粮垛"]];
+const CP_LABELS=[["STRAT_VISION","战略视野（日程）"],["STRAT_NOISE","敌情估计误差"],["STRAT_LAG","迟疑上限（×(1−统帅)）"],["RAID_INT","谋划截粮所需智略"],["FORESIGHT_INT","预设防备/择天时所需智略"],["SPY_INT","探知敌粮所需智略"],["COUNTER_INT","低于此智略可能围魏救赵"],["COUNTER_P","围魏救赵误判倾向"],["WITHDRAW_FOOD","前线粮少于此日数议退兵"],["STARVE_COLLAPSE","断粮满此日数全军溃散"],["CONVOY_LOAD","运粮每趟装粮"],["BURN_TRIGGER","烧粮仓：一次焚此比例即军心大震"],["BURN_ORG","烧粮仓：组织打击（×严重度）"],["BURN_FAR","烧粮仓：不就食该仓者打击折扣"],["BURN_DESERT","烧粮仓：逃亡比例"],["BURN_SEV_BASE","烧粮仓：严重度基数"],["BURN_SEV_SHARE","烧粮仓：严重度×焚粮占全军存粮比"],["SHAKEN_DAYS","军心动摇日数"],["SHAKEN_REC","动摇期夜间恢复减少"],["SHAKEN_CAP","动摇期组织上限"],["SHAKEN_FLEE","动摇时主力议退倾向"],["EXPLOIT_RATIO","乘乱击之所需兵力比"],["CUT_ORG","截粮：运粮被截过半组织小挫"],["FIRE_INT","谋划火攻所需智略"],["FIRE_BASE","火攻：火势基数"],["FIRE_ORG","火攻：被焚营组织打击"],["FIRE_MEN","火攻：被焚营伤亡"],["FIRE_FORT","火攻：营垒毁损"],["FIRE_SPREAD","火攻：蔓延概率（×火势）"],["FIRE_SHOCK_CAMPS","连焚此数营则全军大震"],["WX_PERSIST","天气延续概率"],["SUPPLY_RANGE","就粮距离（日）"],["FOOD_CAP_DAYS","随军粮草上限（日）"],["EAT_PER_10","每 10 部每日食粮"],["RAID_GOAL","截粮焚毁目标比例"],["RAID_UNGUARDED","无守粮仓每日被焚比例"],["STARVE_ORG","断粮每日组织打击"],["STARVE_MEN","断粮每日减员"],["NIGHT_ORG","夜间组织恢复"],["RALLY","溃部收拢概率"],["CAMP_BUILD","驻敌前每日筑营"],["ASSAULT_RATIO","AI 强攻所需战力比"],["ASSAULT_P","AI 试攻城垒概率"],["STANDOFF_LOSS","对垒之日零星伤亡"],["SCOUT_P","斥候发现袭粮之敌概率"],["DEPOT_UNITS_PER","每多少存粮化为一部粮垛"],["LATE_ENGAGE_PH","过此时段抵达敌前则次日清晨再战（0后半夜…5前半夜）"],["NIGHT_ROUNDS","夜战回合数"],["NEAR_DAYS","敌军距此（日）以内即报敌情"]];
 const AN_TYPE={posture:"相持姿态",weather:"天时",intel:"情报",order:"军令",decision:"抉择",luck:"战运",defect:"倒戈",morale:"军心"};
 function anWhen(a){ return [a.day!=null?`第 ${a.day} 日起`:"",a.until!=null?`至第 ${a.until} 日`:"",a.node?`于${(CAMP_SCENARIOS[campCfg.scenario].nodes[a.node]||{}).name||a.node}`:"",a.trigger?({depotLost:"粮仓失"}[a.trigger.split(":")[0]]||a.trigger.split(":")[0])+(a.trigger.split(":")[1]?`·${(CAMP_SCENARIOS[campCfg.scenario].nodes[a.trigger.split(":")[1]]||{}).name||""}${a.trigger.split(":")[2]?Math.round(a.trigger.split(":")[2]*100)+"%":""}`:""):""].filter(Boolean).join(" "); }
 function anEffect(a){ const sc=CAMP_SCENARIOS[campCfg.scenario], an=id=>{ const x=sc.armies.find(q=>q.id===id); return x?x.name.split(" · ")[0]:id; }, sn=s=>sc.sides[s]?sc.sides[s].name:s, nn=n=>(sc.nodes[n]||{}).name||n;

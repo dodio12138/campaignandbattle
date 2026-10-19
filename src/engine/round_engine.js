@@ -427,7 +427,7 @@ class Battle{
     this.R=makeRng(seed ?? Math.floor(Math.random()*4294967296));
     this.terr=TERRAIN[spec.terrain]; this.mode=spec.mode; this.hold=spec.mode==="攻守"?(spec.hold||0):0;
     this.stage = spec.mode==="围城"?"围城战":(spec.mode==="阵地"?"阵地战":"野战"); this.daily=[]; this.endReason=null;
-    this.days=Math.max(1,spec.days||1); this.day=1; this.dayStart=0; this.weather=spec.weather||"晴"; this.night0=!!spec.night;
+    this.days=Math.max(1,spec.days||1); this.firstRounds=spec.rounds||0; this.day=1; this.dayStart=0; this.weather=spec.weather||"晴"; this.night0=!!spec.night;
     this.bothAtk = spec.mode==="决战"||spec.mode==="遭遇";
     this.A=new Side(this,"A",spec.A,true); this.B=new Side(this,"B",spec.B,this.bothAtk);
     this.phase = this.bothAtk?1:0; this.rnd=0; this.done=false; this.winner=null; this.nightRetreat=false;
@@ -811,7 +811,7 @@ class Battle{
     const gone=s=>!s.aliveFront().length&&!s.aliveColumn().length;
     const ad=gone(A), bd=gone(B);
     if(ad||bd){ this.winner=(ad&&bd)?null:(ad?B:A); this.endReason = this.mode==="围城"?(this.winner===A?"城破":"攻城失败溃退"):"溃败"; this.finish(); return; }
-    if(dr>=P.DAY_ROUNDS){ if(this.day<this.days) this.night(); else { this.winner=null; this.endReason="期满对峙"; this.dayReport(); this.finish(); } }
+    if(dr>=(this.day===1&&this.firstRounds?this.firstRounds:P.DAY_ROUNDS)){ if(this.day<this.days) this.night(); else { this.winner=null; this.endReason="期满对峙"; this.dayReport(); this.finish(); } }   // 首日可打的回合数：战役中按开战时段折算
   }
 
   /* 当日战况 */

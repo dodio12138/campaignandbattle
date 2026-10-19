@@ -11,7 +11,7 @@ const sc = E.CAMP_SCENARIOS[key]; if (!sc) { console.error("未知剧本：" + k
 const hist = opt("history"), seed0 = +(opt("seed") ?? 1);
 const play = seed => { const c = new E.Campaign(sc, { control: { A: "ai", B: "ai" }, seed, history: hist != null, tendency: hist != null ? +hist : 0 });
   for (let d = 0; d < (sc.maxDays || 60) + 5 && !c.over; d++) { for (const e of c.beginDay()) c.resolveAuto(e); c.endDay(); } return c; };
-if (opt("log")) { const c = play(+opt("log")); for (const l of c.log) console.log(`D${l.day} ${l.kind ? "[" + l.kind + "] " : ""}${l.t}`); process.exit(0); }
+if (opt("log")) { const c = play(+opt("log")); for (const l of c.log) console.log(`D${l.day}${l.ph!=null?"·"+E.PERIODS[l.ph].n:""} ${l.kind ? "[" + l.kind + "] " : ""}${l.t}`); process.exit(0); }
 const res = {}, oc = {}; let days = 0, fid = 0;
 for (let i = 0; i < N; i++) { const c = play(seed0 + i); const k = c.over ? (c.over.side ? c.sideName(c.over.side) + "：" + c.over.text : c.over.text) : "未决";
   res[k] = (res[k] || 0) + 1; days += c.day;

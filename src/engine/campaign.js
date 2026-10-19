@@ -47,8 +47,16 @@ const CP = {
   SCOUT_P:0.35,        // 斥候发现相邻敌军（将袭我粮仓）的概率（×智略差）
   ASSAULT_RATIO:2.2,            // AI 攻方：战力达守方此倍数且士气充足才强攻城垒
   ASSAULT_P:0.2,                // 否则每日以此概率（×战力比÷工事）试攻，其余日子对垒不战
-  STANDOFF_LOSS:0.004,          // 对垒不战之日，双方零星矢石伤亡           // 粮仓入战时，每 15 单位存粮化为一部"辎重"（粮垛）
+  STANDOFF_LOSS:0.004,
+  // —— 时段：一日六时段，行军、接敌、夜袭按时段推进 ——
+  LATE_ENGAGE_PH:2,             // 抵达敌前若已过此时段（上午）且非奇袭、非途中遭遇：隔营相望，次日清晨再战
+  NIGHT_ROUNDS:12,              // 夜战回合数（截粮、火攻多在夜间）
+  NEAR_DAYS:1,                  // 敌军进入己方据点或军团此路程（日）之内即为"敌情"          // 对垒不战之日，双方零星矢石伤亡           // 粮仓入战时，每 15 单位存粮化为一部"辎重"（粮垛）
 };
+/* 一日六时段：每段约四个时辰。行军默认走清晨、上午、下午三段；截粮、火攻夜行（前半夜、后半夜、清晨） */
+const PERIODS=[{n:"后半夜",t:"00–04",night:true},{n:"清晨",t:"04–08"},{n:"上午",t:"08–12"},{n:"下午",t:"12–16"},{n:"傍晚",t:"16–20"},{n:"前半夜",t:"20–24",night:true}];
+const PERIOD_ROUNDS=[12,15,11,8,4,12];   // 某时段开战时，到日暮（或夜战结束）可打的回合数
+const MARCH_DAY=[1,2,3], MARCH_NIGHT=[5,0,1];
 const MISSION_NAME={hold:"驻守",attack:"进攻",fire:"火攻营寨",raid:"截粮·焚粮",delay:"阻击（坚守后撤回）",reinforce:"增援",escort:"护粮运粮",retreat:"撤回"};
 const FIRE_WX={大风:1.6,酷暑:1.4,晴:1,雾:0.7,雪:0.2,雨:0};
 const WEATHER_TABLE={春:{晴:0.5,雨:0.25,大风:0.15,雾:0.1},夏:{晴:0.4,雨:0.25,酷暑:0.3,大风:0.05},秋:{晴:0.5,雨:0.2,大风:0.15,雾:0.15},冬:{晴:0.45,雪:0.3,大风:0.15,雾:0.1}};
@@ -190,7 +198,7 @@ class StrategicAI{
 class Campaign{
   constructor(sc,opts={}){
     const S=JSON.parse(JSON.stringify(sc));
-    this.sc=S; this.name=S.name; this.season=S.season; this.sideInfo=S.sides; this.day=1; this.log=[]; this.pending=[]; this.over=null;
+    this.sc=S; this.name=S.name; this.season=S.season; this.sideInfo=S.sides; this.day=1; this.ph=0; this.log=[]; this.pending=[]; this.over=null; this.frames=[]; this.fought={}; this.alerts=[]; this.alertAI={A:false,B:false}; this.reDecided={A:false,B:false}; this.near={A:[],B:[]};
     this.nodes=S.nodes; for(const id in this.nodes){ const n=this.nodes[id]; n.id=id; if(n.depot) n.depot.food0=n.depot.food; if(n.wall!=null) n.wall0=n.wall; }
     this.edges=S.edges.map(([a,b,d])=>({a,b,d}));
     this.control=opts.control||{A:"player",B:"ai"};
@@ -229,14 +237,14 @@ class Campaign{
     for(const a of this.anchors("posture")) if(this.trig(a)&&this.histTry(a)){ this.histPosture=this.histPosture||{}; this.histPosture[a.side]=a; }
     for(const a of this.anchors("intel")) if(this.trig(a)&&this.histTry(a)){ this.intelAll[a.side]=true; this.raidBonus=this.raidBonus||{}; this.raidBonus[a.side]=a.bonus||1.3; }
     for(const a of this.anchors("order")) if(this.trig(a)){ const ar=this.army(a.army); if(!ar||ar.gone||!this.alive(ar)) { this.histDone[a.id]="missed"; continue; }
-      if(this.control[ar.side]==="player"){ this.histHint=this.histHint||{}; this.histHint[a.id]=a; continue; }
+      if(this.control[ar.side]==="player"){ this.histHint=this.histHint||{}; if(!this.histHint[a.id]) this.alert("hist",ar.side,`史实之机：${a.text}`); this.histHint[a.id]=a; continue; }
       if(this.histTry(a)){ this.setOrder(ar,a.mission,a.target,{retreatAt:a.retreatAt??ar.mission.retreatAt});
         if(a.holdOthers) for(const [id,nd] of Object.entries(a.holdOthers)){ const o=this.army(id); if(o&&!o.gone&&this.alive(o)&&o.side===ar.side){ if(o.at!==nd) this.setOrder(o,"reinforce",nd,{retreatAt:0.3}); else this.setOrder(o,"hold",nd); o.task=""; o.histLock=this.day+(a.lock||3); } } ar.task=a.mission==="raid"?"raid":ar.task; this.decision(ar.side,`${ar.name.split(" · ")[0]}：${MISSION_NAME[a.mission]}${a.target?this.nodes[a.target].name:""}`,`史实：${a.text}`,a.mission==="raid"?"raid":a.mission==="retreat"?"withdraw":""); } }
     for(const a of this.anchors("morale").concat(this.anchors("defect"))) if(this.trig(a)&&this.histTry(a)){
       if(a.type==="morale"){ for(const ar of this.armies) if(ar.side===a.side&&!ar.gone) for(const u of ar.units){ u.org=Math.max(0,u.org-UT[u.n].org*(a.org||0.2)); if(!UT[u.n].supply) u.men*=1-(a.desert||0); } }
       if(a.type==="defect"&&(!a.to||a.to==="none")){ const ar=this.army(a.army); if(ar&&!ar.gone){ ar.gone=true; for(const u of ar.units) u.gone=true; this.defected.push(ar.id); this.note(`${ar.name} 率所部降于他国，离开战场`,"big"); } continue; }
       if(a.type==="defect"){ const ar=this.army(a.army); if(ar&&!ar.gone&&this.alive(ar)){ ar.side=a.to; ar.ai=a.ai||"reserve"; ar.home=a.joinAt||ar.home; ar.name=ar.name+"（降）"; this.defected.push(ar.id); if(a.joinAt){ ar.at=a.joinAt; ar.prev=a.joinAt; ar.path=[]; ar.prog=0; this.setOrder(ar,"hold",a.joinAt); } else this.setOrder(ar,"retreat",ar.home); this.note(`${ar.name} 倒戈，投奔${a.joinAt?this.nodes[a.joinAt].name:this.sideName(a.to)}`,"big"); } } } }
-  note(t,kind=""){ this.log.push({day:this.day,t,kind}); if(this.log.length>400) this.log.shift(); }
+  note(t,kind=""){ this.log.push({day:this.day,ph:this.ph,t,kind}); if(this.log.length>400) this.log.shift(); }
   sideName(s){ return this.sideInfo[s].name; }
   army(id){ return this.armies.find(a=>a.id===id); }
   edge(a,b){ return this.edges.find(e=>(e.a===a&&e.b===b)||(e.a===b&&e.b===a)); }
@@ -260,33 +268,53 @@ class Campaign{
     a.held=0;
     const dest = type==="retreat"?(target||a.mission.returnTo||a.home):(type==="hold"?a.at:target);
     if(dest&&dest!==a.at){ const r=this.route(a.at,dest,a.side,type==="raid"||type==="escort"); a.path=r?r.path:[]; a.prog=0; } else { a.path=[]; a.prog=0; }
+    this.markOrder(a);
   }
-  /* ───── 一日：AI 下令 → 行军 → 相遇检定 ───── */
-  beginDay(){
+  /* 下令之时记下"示意大箭头"：自下令处至目的地，此后不随行军更新，抵达或改令即撤 */
+  markOrder(a){ a.order=a.path.length?{seq:[a.at,...a.path],day:this.day,ph:this.ph,type:a.mission.type}:null; }
+  /* ───── 时段：（每日首段）AI 下令 → 行军 → 相遇检定。一日六段，见 PERIODS ───── */
+  marchPh(a){ return ["raid","fire"].includes(a.mission.type)?MARCH_NIGHT:MARCH_DAY; }
+  get tick(){ return this.day*6+this.ph; }
+  timeText(ph=this.ph){ return PERIODS[ph].n; }
+  /* 事件：界面据此暂停（只看玩家一方），AI 一方据"敌情 / 粮仓"临时重议 */
+  alert(kind,side,text){ this.alerts.push({kind,side,text,day:this.day,ph:this.ph}); if((kind==="sight"||kind==="depot")&&this.control[side]==="ai") this.alertAI[side]=true; }
+  beginPeriod(){
     if(this.over) return [];
-    this.histDayStart();
-    for(const s of ["A","B"]) if(this.control[s]==="ai") this.aiOrders(s);
+    this.alerts=[]; this.pending=[]; const ph=this.ph, now=this.tick;
+    if(ph===0){ this.reDecided={A:false,B:false}; this.histDayStart(); for(const s of ["A","B"]) if(this.control[s]==="ai") this.aiOrders(s); }
+    else for(const s of ["A","B"]) if(this.control[s]==="ai"&&this.alertAI[s]&&!this.reDecided[s]){ this.reDecided[s]=true; this.alertAI[s]=false; this.aiOrders(s); }   // 敌情突变：当日临时重议一次
     // 行军（目的地未到而路线中断者，重新择路）
-    for(const a of this.armies){ a.arrived=false; a.met=false; a.moving=null;
+    for(const a of this.armies){ a.arrived=false; a.met=false; a.moving=a.path.length&&a.prog>0?a.path[0]:null;
       if(a.gone||a.path.length) continue; const m=a.mission; const dest=m.type==="retreat"?(m.target||m.returnTo||a.home):(["attack","raid","fire","reinforce","escort","delay"].includes(m.type)?m.target:null);
-      if(dest&&dest!==a.at){ const r=this.route(a.at,dest,a.side,m.type==="raid"||m.type==="escort"||m.type==="fire"); if(r) a.path=r.path; } }
+      if(dest&&dest!==a.at){ const r=this.route(a.at,dest,a.side,m.type==="raid"||m.type==="escort"||m.type==="fire"); if(r){ a.path=r.path; this.markOrder(a); } } }
     for(const a of this.armies){ if(!this.alive(a)&&!(a.units.some(u=>u.n==="辎重"&&!u.gone))) continue; a.moved=false; if(!a.path.length) continue;
+      if((a.busy||0)>now||!this.marchPh(a).includes(ph)) continue;   // 交战未毕，或非行军时段（扎营）
       const nx=a.path[0], e=this.edge(a.at,nx); if(!e){ a.path=[]; continue; }
-      a.prog+=this.speed(a); a.moving=nx; a.moved=true;
-      if(a.prog>=e.d-1e-9){ a.prev=a.at; a.at=nx; a.path.shift(); a.prog=0; a.moving=null; a.arrived=true; a.siegeDays=0; } else a.arrived=false; }
-    // 途中相遇（同一条路相向而行）
-    const eng=[];
-    for(const a of this.armies) for(const b of this.armies){ if(a.side!=="A"||b.side!=="B"||!a.moving||!b.moving) continue;
+      a.prog+=this.speed(a)/MARCH_DAY.length; a.moving=nx; a.moved=true;
+      if(a.prog>=e.d-1e-9){ a.prev=a.at; a.at=nx; a.path.shift(); a.prog=0; a.moving=null; a.arrived=true; a.siegeDays=0;
+        if(!a.path.length) this.alert("arrive",a.side,`${a.name} 抵达${this.nodes[a.at].name}`); } }
+    // 途中相遇（同一条路相向而行）。截粮、火攻的奇兵夜从间道出，不与敌在路上相遇
+    const eng=[], stealth=a=>["raid","fire"].includes(a.mission.type);
+    for(const a of this.armies) for(const b of this.armies){ if(a.side!=="A"||b.side!=="B"||!a.moving||!b.moving||stealth(a)||stealth(b)) continue;
       if(a.moving===b.at&&b.moving===a.at){ const e=this.edge(a.at,b.at); if(a.prog+b.prog>=e.d-1e-9){ const meet=a.prog>=b.prog?b.at:a.at; a.at=meet; b.at=meet; a.path=[]; b.path=[]; a.prog=b.prog=0; a.moving=b.moving=null; a.met=b.met=true; } } }
-    // 同一节点相遇
+    // 同一节点相遇：一地一日至多一战。相持之地每日清晨接战（或对垒）；新到者上午以前、奇袭或途中遭遇即战，过午则隔营相望，来日清晨再战
     const byNode={}; for(const a of this.armies){ if(a.moving) continue; if(!this.alive(a)&&!a.units.some(u=>u.n==="辎重"&&!u.gone)) continue; (byNode[a.at]=byNode[a.at]||[]).push(a); }
     for(const [node,list] of Object.entries(byNode)){ const sides=new Set(list.map(a=>a.side)); if(sides.size<2) continue;
       for(const a of list){ if(a.path.length){ a.path=[]; a.prog=0; } }   // 遇敌即止
-      eng.push(this.makeEngagement(node,list)); }
-    // 敌军占据无人守卫的粮仓 / 城池
-    for(const a of this.armies){ if(a.moving||!this.alive(a)) continue; const n=this.nodes[a.at]; if(byNode[a.at]&&new Set(byNode[a.at].map(x=>x.side)).size>1) continue;
+      if(this.fought[node]===this.day) continue;
+      if(list.some(a=>(a.busy||0)>now)) continue;
+      const fresh=list.some(a=>a.arrived||a.met), raidy=list.some(a=>(a.arrived||a.met)&&["raid","fire"].includes(a.mission.type));
+      const go=ph===1||(fresh&&(list.some(a=>a.met)||raidy||ph<=CP.LATE_ENGAGE_PH));
+      if(!go){ if(fresh){ for(const a of list) if(a.arrived) a.lateArr=true; this.note(`${this.nodes[node].name}：${PERIODS[ph].night?"夜幕已垂":"日已过午"}，两军隔营相望，约期来日`,""); } continue; }
+      for(const a of list) if(a.lateArr){ a.arrived=true; a.lateArr=false; }   // 昨日晚到者，今晨作新到之军论
+      const e=this.makeEngagement(node,list); e.ph=ph; e.rounds=PERIODS[ph].night?CP.NIGHT_ROUNDS:PERIOD_ROUNDS[ph]; if(PERIODS[ph].night&&this.weather!=="雨") e.night=true;
+      e.id="E"+this.day+"-"+ph+"-"+node; e.met=list.some(a=>a.met); this.fought[node]=this.day; eng.push(e);
+      for(const s of ["A","B"]) this.alert("contact",s,`${this.nodes[node].name}：${this.sideName(e.att)}攻${this.sideName(e.def)}（${e.mode}${e.night?"·夜":""}）`); }
+    if(ph===1) for(const a of this.armies) a.lateArr=false;   // 晚到之约只到次日清晨
+    // 敌军占据无人守卫的粮仓 / 城池（每军每日至多一次）
+    for(const a of this.armies){ if(a.moving||!this.alive(a)||a.lootDay===this.day) continue; const n=this.nodes[a.at]; if(byNode[a.at]&&new Set(byNode[a.at].map(x=>x.side)).size>1) continue;
       if(n.owner&&n.owner!==a.side&&!this.armies.some(x=>x.side===n.owner&&x.at===a.at&&this.alive(x))){
-        if(n.depot&&n.depot.food>0){ if(a.mission.type==="attack"){ n.owner=a.side; this.note(`${a.name} 占领 ${n.name}，缴获存粮 ${Math.round(n.depot.food)}`,"big"); }
+        if(n.depot&&n.depot.food>0){ a.lootDay=this.day; if(a.mission.type==="attack"){ n.owner=a.side; this.note(`${a.name} 占领 ${n.name}，缴获存粮 ${Math.round(n.depot.food)}`,"big"); }
           else { const b=n.depot.food*CP.RAID_UNGUARDED; n.depot.food-=b; this.depotLoss(n,b); this.note(`${a.name} 于 ${n.name} 纵火焚粮 ${Math.round(b)}`,"big"); } }
         else if(a.mission.type==="attack"&&n.type!=="road"&&n.type!=="ford"){ n.owner=a.side; this.note(`${a.name} 占领 ${n.name}`,"big"); } } }
     // 火攻：到达目标营寨的火攻军团先纵火，再接战
@@ -295,11 +323,37 @@ class Campaign{
       if(n.owner&&n.owner!==a.side&&!this.armies.some(x=>x.side===n.owner&&x.at===a.at&&this.alive(x))){ this.fireAttack(a.at,n.owner,[a]); } }
     this.pending=eng; return eng;
   }
+  /* 时段终了：敌情检视、记录态势；第六段终了即日终 */
+  endPeriod(){
+    if(this.over) return;
+    this.sightCheck(); this.frame(); this.pending=[];
+    if(this.ph<PERIODS.length-1){ this.ph++; return; }
+    this.dayEnd();   // 日终结算记在当日前半夜，dayEnd 末尾翻到次日后半夜
+  }
+  /* 兼容旧接口（测试、命令行推演）：beginDay 推进时段直到出现交战或一日终了；endDay 走完当日余下时段（其后交战一律速决） */
+  beginDay(){ this.dayRolled=false;
+    while(!this.over){ const eng=this.beginPeriod(); if(eng.length) return eng; const d=this.day; this.endPeriod(); if(this.day!==d){ this.dayRolled=true; return []; } } return []; }
+  endDay(){ if(this.dayRolled){ this.dayRolled=false; return; } if(this.over) return;
+    const d=this.day; this.endPeriod(); while(!this.over&&this.day===d){ for(const e of this.beginPeriod()) if(!e.done) this.resolveAuto(e); this.endPeriod(); } }
+  /* 道路距离（日），不计敌军；用于敌情判断 */
+  roadDist(){ if(this._rd) return this._rd; const ids=Object.keys(this.nodes), D={}; for(const a of ids){ D[a]={}; for(const b of ids) D[a][b]=a===b?0:Infinity; }
+    for(const e of this.edges){ D[e.a][e.b]=Math.min(D[e.a][e.b],e.d); D[e.b][e.a]=Math.min(D[e.b][e.a],e.d); }
+    for(const k of ids) for(const i of ids) for(const j of ids) if(D[i][k]+D[k][j]<D[i][j]) D[i][j]=D[i][k]+D[k][j];
+    Object.defineProperty(this,"_rd",{value:D,enumerable:false,writable:true}); return D; }
+  sightCheck(){ const D=this.roadDist();
+    for(const s of ["A","B"]){ const posts=[...Object.values(this.nodes).filter(n=>n.owner===s&&(n.depot||n.wall!=null||n.fort>0)).map(n=>n.id),...this.armies.filter(a=>a.side===s&&!a.gone&&this.alive(a)).map(a=>a.at)];
+      const now=this.armies.filter(a=>a.side!==s&&!a.gone&&this.alive(a)&&posts.some(p=>Math.min(D[a.at][p],a.moving?D[a.moving][p]:Infinity)<=CP.NEAR_DAYS)).map(a=>a.id);
+      const prev=new Set(this.near[s]||[]); for(const id of now) if(!prev.has(id)){ const a=this.army(id); this.alert("sight",s,`斥候报：${a.name} 出现在${this.nodes[a.moving||a.at].name}一带`); }
+      this.near[s]=now; } }
+  /* 每时段态势（报告的逐时段回放用）：[id, at, next, prog, gone, 任务, 兵员, 组织, 部数, 动摇] */
+  frame(){ const o={}; for(const n of Object.values(this.nodes)) o[n.id]=n.owner||null;
+    const dp={}; for(const n of Object.values(this.nodes)) if(n.depot) dp[n.id]=Math.round(n.depot.food*10)/10;
+    this.frames.push({d:this.day,p:this.ph,w:this.weather,o,dp,a:this.armies.map(a=>{ const cu=this.combatUnits(a); return [a.id,a.at,a.path[0]||null,Math.round((a.prog||0)*100)/100,a.gone?1:0,a.mission.type,Math.round(cu.reduce((t,u)=>t+u.men,0)),cu.length?Math.round(cu.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cu.length*100)/100:0,cu.length,a.shaken>0?1:0,a.side,a.path.slice(),a.order&&a.path.length?a.order.seq:null]; })}); }
   /* 火攻营寨：火势 = 基数 × 天时 × 林木/营寨 × 主将智略；可沿 1 日内相邻的己方营寨蔓延（火烧连营） */
   fireStrength(node,gen,wx){ const n=this.nodes[node]; const cover=n.cover==="林"?1.5:(n.type==="camp"?1:(n.wall!=null?0.4:0.8)); return Math.min(1,CP.FIRE_BASE*(FIRE_WX[wx??this.weather]??1)*cover*(0.6+(gen?gen.int:60)/250)); }
   fireAttack(node,defSide,fa){ const lead=fa.slice().sort((x,y)=>y.gen.int-x.gen.int)[0]; let f=this.fireStrength(node,lead.gen); const n0=this.nodes[node];
     for(const a of fa){ a.mission={...a.mission,type:"attack",target:node,retreatAt:Math.max(a.mission.retreatAt||0,0.45)}; a.task="fire"; }
-    if(f<0.08){ this.note(`${lead.name} 欲火攻${n0.name}，${this.weather==="雨"?"天雨":"火不能起"}，改为强攻`,"bad"); this.events.push({day:this.day,type:"fire",node,side:defSide,f:0,burned:[],by:fa[0].side}); return; }
+    if(f<0.08){ this.note(`${lead.name} 欲火攻${n0.name}，${this.weather==="雨"?"天雨":"火不能起"}，改为强攻`,"bad"); this.events.push({day:this.day,ph:this.ph,type:"fire",node,side:defSide,f:0,burned:[],by:fa[0].side}); return; }
     const burned=[]; const burn=(id,fx)=>{ const n=this.nodes[id]; burned.push({node:id,f:fx});
       for(const a of this.armies){ if(a.side!==defSide||a.gone||a.at!==id) continue; for(const u of a.units){ if(u.gone) continue; const t=UT[u.n]; u.org=Math.max(0,u.org-t.org*CP.FIRE_ORG*fx); u.men*=1-CP.FIRE_MEN*fx*(t.engine||t.supply?2:1); if(t.supply&&u.cargo) u.cargo*=1-fx*0.8; }
         a.fort=Math.max(0,(a.fort||0)-CP.FIRE_FORT*fx); a.shaken=Math.max(a.shaken||0,2); if(a.cargo) a.cargo=a.units.filter(u=>u.n==="辎重"&&!u.gone).reduce((s,u)=>s+(u.cargo||0),0); }
@@ -309,11 +363,11 @@ class Campaign{
     while(front.length){ const nx=[]; for(const {id,f:fx} of front) for(const {n:nb,d} of this.nbrs(id)){ if(seen.has(nb)||d>1) continue; const N=this.nodes[nb];
         const camp=N.owner===defSide&&(N.type==="camp"||N.cover==="林")&&N.wall==null&&this.armies.some(a=>a.side===defSide&&a.at===nb&&!a.gone);
         if(!camp) continue; seen.add(nb); const f2=fx*0.75; if(this.rand()<fx*CP.FIRE_SPREAD){ burn(nb,f2); nx.push({id:nb,f:f2}); } } front=nx; }
-    this.events.push({day:this.day,type:"fire",node,side:defSide,f,burned:burned.map(b=>b.node),by:fa[0].side});
+    this.events.push({day:this.day,ph:this.ph,type:"fire",node,side:defSide,f,burned:burned.map(b=>b.node),by:fa[0].side}); this.alert("shaken",defSide,`${n0.name}遭火攻`);
     this.note(`${lead.name} 火攻${n0.name}（${this.weather}${n0.cover==="林"?"·林木":""}，火势 ${Math.round(f*100)}%）${burned.length>1?`，火势蔓延，连焚 ${burned.map(b=>this.nodes[b.node].name).join("、")} 共 ${burned.length} 营`:""}`,"big");
     if(burned.length>=CP.FIRE_SHOCK_CAMPS){ const sev=Math.min(1,CP.BURN_SEV_BASE+0.15*burned.length); let hit=0,k=0;
       for(const a of this.armies){ if(a.side!==defSide||a.gone) continue; const near=burned.some(b=>b.node===a.at); for(const u of a.units){ if(u.gone) continue; const t=UT[u.n]; if(near) continue; const d=t.org*CP.BURN_ORG*sev*CP.BURN_FAR; u.org=Math.max(0,u.org-d); hit+=d/t.org; k++; } a.shaken=Math.max(a.shaken||0,CP.SHAKEN_DAYS); }
-      this.events.push({day:this.day,type:"shock",node,side:defSide,sev,org:Math.round(hit/Math.max(1,k)*100),cause:"fire"});
+      this.events.push({day:this.day,ph:this.ph,type:"shock",node,side:defSide,sev,org:Math.round(hit/Math.max(1,k)*100),cause:"fire"});
       this.note(`连营被焚，${this.sideName(defSide)}军心大震，${CP.SHAKEN_DAYS} 日内组织难复`,"bad"); } }
   makeEngagement(node,list){
     const n=this.nodes[node]; const sidesP={A:list.filter(a=>a.side==="A"),B:list.filter(a=>a.side==="B")};
@@ -344,8 +398,8 @@ class Campaign{
     const A=side(e.att), B=side(e.def);
     const luckBias={}; if(this.hist.on&&this.hist.tend>0) for(const a of this.hist.anchors.filter(a=>a.type==="luck"&&!a.off&&(!a.node||a.node===e.node)&&(a.day==null||this.day>=a.day))){ const bs=a.side===e.att?"A":"B"; luckBias[bs]=(luckBias[bs]||1)*(1+((a.value||1.2)-1)*Math.min(1,this.hist.tend*(a.weight??1)));
       if(!this.histDone[a.id]) (e.histLuck=e.histLuck||[]).push(a.id); }
-    return {seed:this.randInt(),luckBias,terrain:n.terrain||"平原",mode:e.mode==="围城"&&B.wall==null?"阵地":e.mode,days:1,hold:0,weather:this.weather,night:e.night,A,B,
-      campaign:{eid:e.id,node:e.node,day:this.day,att:e.att,def:e.def,nodeName:n.name}};
+    return {seed:this.randInt(),luckBias,terrain:n.terrain||"平原",mode:e.mode==="围城"&&B.wall==null?"阵地":e.mode,days:1,rounds:e.rounds||P.DAY_ROUNDS,hold:0,weather:this.weather,night:e.night,A,B,
+      campaign:{eid:e.id,node:e.node,day:this.day,ph:e.ph??this.ph,att:e.att,def:e.def,nodeName:n.name}};
   }
   /* 战斗结果写回 */
   applyBattle(e,bt){
@@ -363,10 +417,12 @@ class Campaign{
     for(const a of this.armies) if(a.units.some(u=>u.n==="辎重")) a.cargo=a.units.filter(u=>u.n==="辎重"&&!u.gone).reduce((s,u)=>s+(u.cargo||0),0);
     for(const [id,c0] of Object.entries(cargo0)){ const a=this.army(id); const l=c0-(a.cargo||0); if(l>0.5) this.convoyLoss(a,l,c0); }
     const wB=r.winner==="相持"?null:r.winner, wC=wB?map[wB]:null, lC=wC?(wC==="A"?"B":"A"):null;
-    const desc=`${n.name}之战（${e.mode}${e.night?"·夜":""}${this.weather!=="晴"?"·"+this.weather:""}）：${r.reason==="目标达成撤出"&&bt.retreatSide?this.sideName(map[bt.retreatSide.name])+"目标达成，撤出":(wC?this.sideName(wC)+"胜·"+r.reason:"相持")}；${this.sideName(e.att)}损 ${Math.round(r.A.loss*100)}%，${this.sideName(e.def)}损 ${Math.round(r.B.loss*100)}%${r.A.burnt>0.01||r.B.burnt>0.01?`；焚辎重 ${Math.round(Math.max(r.A.burnt,r.B.burnt)*100)}%`:""}`;
+    const span=Math.max(1,Math.ceil((bt.rnd||1)/(P.DAY_ROUNDS/4))); for(const cs of ["A","B"]) for(const id of e.armies[cs]){ const a=this.army(id); if(a) a.busy=this.tick+span; }   // 交战占去的时段
+    const eph=e.ph??this.ph, tw=e.night?(PERIODS[eph].night?"·夜":"·拂晓奇袭"):"";
+    const desc=`${n.name}之战（${PERIODS[eph].n}·${e.mode}${tw}${this.weather!=="晴"?"·"+this.weather:""}）：${r.reason==="目标达成撤出"&&bt.retreatSide?this.sideName(map[bt.retreatSide.name])+"目标达成，撤出":(wC?this.sideName(wC)+"胜·"+r.reason:"相持")}；${this.sideName(e.att)}损 ${Math.round(r.A.loss*100)}%，${this.sideName(e.def)}损 ${Math.round(r.B.loss*100)}%${r.A.burnt>0.01||r.B.burnt>0.01?`；焚辎重 ${Math.round(Math.max(r.A.burnt,r.B.burnt)*100)}%`:""}`;
     this.note(desc,"battle");
     const menOf=cs=>e.armies[cs].reduce((t,id)=>t+this.combatUnits(this.army(id)).reduce((q,u)=>q+u.men,0),0);
-    this.battles.push({day:this.day,node:e.node,place:n.name,mode:e.mode,night:e.night,weather:this.weather,att:e.att,def:e.def,armies:{A:e.armies.A.map(id=>this.army(id).name),B:e.armies.B.map(id=>this.army(id).name)},
+    this.battles.push({day:this.day,ph:e.ph??this.ph,met:!!e.met,node:e.node,place:n.name,mode:e.mode,night:e.night,weather:this.weather,att:e.att,def:e.def,armies:{A:e.armies.A.map(id=>this.army(id).name),B:e.armies.B.map(id=>this.army(id).name)},
       lossPct:{[e.att]:r.A.loss,[e.def]:r.B.loss},burnt:Math.max(r.A.burnt||0,r.B.burnt||0),depotBurn:depotHad>0?depotHad-depotLeft:0,winner:wC,reason:r.reason,raidOk:(r.A.missionDone==="success"&&r.A.mission==="destroy")?e.att:((r.B.missionDone==="success"&&r.B.mission==="destroy")?e.def:null),desc,
       armyIds:{A:[...e.armies.A],B:[...e.armies.B]}});
     for(const id of e.histLuck||[]){ const a=this.hist.anchors.find(x=>x.id===id), rec=this.battles[this.battles.length-1]; if(!a||this.histDone[id]) continue;   // 战运锚点：仅在战果合于史时记入史
@@ -385,25 +441,26 @@ class Campaign{
     // 城、营被攻破
     if(wC&&wC===e.att&&n.owner===e.def){ const defLeft=this.armies.some(x=>x.side===e.def&&x.at===e.node&&this.alive(x)&&!x.path.length);
       if(!defLeft&&n.type!=="road"&&n.type!=="ford"){ const raid=e.armies[e.att].some(id=>this.army(id).mission.type==="raid"); n.owner=e.att; if(n.wall!=null) n.wall=Math.max(0.3,bt.B.wall?bt.B.wall.W:n.wall);
-        this.note(`${this.sideName(e.att)}攻占 ${n.name}${n.depot&&raid?"，余粮尽焚":""}`,"big"); this.events.push({day:this.day,type:"capture",node:n.id,side:e.att}); if(n.depot&&raid){ const b=n.depot.food; n.depot.food=0; this.depotLoss(n,b); } } }
+        this.note(`${this.sideName(e.att)}攻占 ${n.name}${n.depot&&raid?"，余粮尽焚":""}`,"big"); this.events.push({day:this.day,ph:this.ph,type:"capture",node:n.id,side:e.att}); if(n.depot&&raid){ const b=n.depot.food; n.depot.food=0; this.depotLoss(n,b); } } }
     if(n.wall!=null&&bt.B.wall&&n.owner===e.def) n.wall=bt.B.wall.W;
     // 攻方在敌前驻扎：加筑营垒
     for(const id of e.armies[e.att]){ const a=this.army(id); if(a.at===e.node&&!a.path.length&&a.mission.type==="attack"){ a.siegeDays=(a.siegeDays||0)+1; a.fort=Math.min(CP.CAMP_MAX,(a.fort||0)+CP.CAMP_BUILD); } }
     e.done=true; e.result=desc;
   }
   /* 烧粮仓：屯粮被焚，全军闻之震恐。严重度取决于这一把火烧掉了全军存粮的多大一块；就食于此仓的军团受创最深 */
-  depotLoss(n,loss){ const side=n.owner; if(!side) return; const before=n.depot.food+loss; this.events.push({day:this.day,type:"depot",node:n.id,side,amount:loss,before});
+  depotLoss(n,loss){ const side=n.owner; if(!side) return; const before=n.depot.food+loss; this.events.push({day:this.day,ph:this.ph,type:"depot",node:n.id,side,amount:loss,before});
     const tot=Object.values(this.nodes).filter(x=>x.depot&&x.owner===side).reduce((s,x)=>s+x.depot.food,0)+this.armies.filter(a=>a.side===side&&!a.gone).reduce((s,a)=>s+(a.food||0)+(a.cargo||0),0)+loss;
     const frac=loss/Math.max(1,before), share=loss/Math.max(1,tot);
+    this.alert("depot",side,`${n.name}粮仓被焚 ${Math.round(loss)}`);
     if(frac<CP.BURN_TRIGGER&&share<CP.BURN_TRIGGER) return;
     const sev=Math.min(1,CP.BURN_SEV_BASE+share*CP.BURN_SEV_SHARE); let hit=0, k=0;
     for(const a of this.armies){ if(a.side!==side||a.gone) continue; const r=a.at===n.id?{days:0}:this.route(a.at,n.id,side); const near=!!r&&r.days<=CP.SUPPLY_RANGE; const f=sev*(near?1:CP.BURN_FAR);
       for(const u of a.units){ if(u.gone) continue; const t=UT[u.n]; const d=t.org*CP.BURN_ORG*f; u.org=Math.max(0,u.org-d); if(t.supply!==true&&!t.engine){ u.men*=1-CP.BURN_DESERT*f; hit+=d/t.org; k++; } }
       a.shaken=Math.max(a.shaken||0,CP.SHAKEN_DAYS); }
-    const pct=Math.round(hit/Math.max(1,k)*100); this.events.push({day:this.day,type:"shock",node:n.id,side,sev,org:pct});
+    const pct=Math.round(hit/Math.max(1,k)*100); this.events.push({day:this.day,ph:this.ph,type:"shock",node:n.id,side,sev,org:pct}); this.alert("shaken",side,`${this.sideName(side)}军心大震`);
     this.note(`${n.name}屯粮被焚（${Math.round(frac*100)}%，占全军存粮 ${Math.round(share*100)}%）——${this.sideName(side)}军心大震，组织平均 −${pct}%，${CP.SHAKEN_DAYS} 日内组织难复（上限 ${Math.round(CP.SHAKEN_CAP*100)}%）`,"bad"); }
   /* 截粮：截击运粮队。只断其后继，不直接动摇全军——除非一次截下半数以上 */
-  convoyLoss(a,loss,before){ this.events.push({day:this.day,type:"convoy",army:a.id,side:a.side,amount:loss,before});
+  convoyLoss(a,loss,before){ this.events.push({day:this.day,ph:this.ph,type:"convoy",army:a.id,side:a.side,amount:loss,before}); this.alert("depot",a.side,`${a.name} 运粮被截 ${Math.round(loss)}`);
     if(loss>=0.5*before){ for(const x of this.armies) if(x.side===a.side&&!x.gone) for(const u of x.units) if(!u.gone) u.org=Math.max(0,u.org-UT[u.n].org*CP.CUT_ORG);
       this.note(`${a.name} 被截，失粮 ${Math.round(loss)}——${this.sideName(a.side)}粮道受阻，军中小挫`,"bad"); } }
   retreatNode(a,from){ // 退往己方方向：取一个无敌军的相邻节点，使其离己方城池/粮仓最近
@@ -413,12 +470,12 @@ class Campaign{
     let nb=this.nbrs(from).map(x=>x.n).filter(x=>!this.enemyAt(x,a.side)&&!this.armies.some(y=>y.side!==a.side&&y.at===x&&this.alive(y)));
     if(nb.some(x=>!enemyOwned(x))) nb=nb.filter(x=>!enemyOwned(x));
     if(!nb.length) return from; nb.sort((x,y)=>dist(x)-dist(y)); return nb[0]; }
-  standoffDay(e){ const n=this.nodes[e.node]; this.events.push({day:this.day,type:"standoff",node:e.node,side:e.att}); for(const s of ["A","B"]) for(const id of e.armies[s]){ const a=this.army(id); for(const u of this.combatUnits(a)) u.men*=1-CP.STANDOFF_LOSS*(s===e.def?0.6:1); }
+  standoffDay(e){ const n=this.nodes[e.node]; this.events.push({day:this.day,ph:this.ph,type:"standoff",node:e.node,side:e.att}); for(const s of ["A","B"]) for(const id of e.armies[s]){ const a=this.army(id); for(const u of this.combatUnits(a)) u.men*=1-CP.STANDOFF_LOSS*(s===e.def?0.6:1); }
     for(const id of e.armies[e.att]){ const a=this.army(id); a.fort=Math.min(CP.CAMP_MAX,(a.fort||0)+CP.CAMP_BUILD); }
     this.note(`${n.name}：两军对垒，${this.sideName(e.att)}未攻，零星对射`,""); e.done=true; e.result="对垒未战"; }
   resolveAuto(e){ if(e.standoff){ this.standoffDay(e); return null; } const spec=this.battleSpec(e); const bt=new Battle(spec,spec.seed); const ais={}; for(const k of ["A","B"]) ais[k]=new TacticalAI(k,{persona:spec[k].ai.persona}); attachRoundAI(bt,ais); bt.run(); this.applyBattle(e,bt); return bt; }
-  /* ───── 日终：任务进度、补给、夜间恢复、气候、胜负 ───── */
-  endDay(){
+  /* ───── 日终（第六时段终了）：任务进度、补给、夜间恢复、气候、胜负 ───── */
+  dayEnd(){
     for(const a of this.armies){ if(a.gone) continue; const m=a.mission, here=!a.path.length;
       if(!here) continue;
       if(m.type==="delay"&&a.at===m.target){ a.held++; if(a.held>=m.holdDays){ this.note(`${a.name} 坚守 ${a.held} 日期满，撤回`,"good"); this.setOrder(a,"retreat",m.returnTo||a.home); } continue; }
@@ -433,8 +490,8 @@ class Campaign{
     // 补给
     for(const a of this.armies){ if(!this.alive(a)) continue; const need=this.eat(a), cap=need*CP.FOOD_CAP_DAYS; a.food=(a.food??cap)-need;
       const dep=this.supplyDepot(a); if(dep&&a.food<cap){ const take=Math.min(cap-a.food,dep.depot.food); dep.depot.food-=take; a.food+=take; a.supplyFrom=dep.id; } else if(!dep) a.supplyFrom=null;
-      if(a.food<0){ a.food=0; a.starving=(a.starving||0)+1; this.events.push({day:this.day,type:"starve",army:a.id,side:a.side}); for(const u of a.units){ u.org=Math.max(0,u.org-UT[u.n].org*CP.STARVE_ORG); u.men*=1-CP.STARVE_MEN*a.starving; } this.note(`${a.name} 断粮第 ${a.starving} 日`,"bad");
-        if(a.starving>=CP.STARVE_COLLAPSE){ for(const u of a.units) u.gone=true; a.gone=true; this.note(`${a.name} 断粮 ${a.starving} 日，军中大饥，众溃而散`,"bad"); this.events.push({day:this.day,type:"collapse",army:a.id,side:a.side}); } } else a.starving=0; }
+      if(a.food<0){ a.food=0; a.starving=(a.starving||0)+1; this.events.push({day:this.day,ph:this.ph,type:"starve",army:a.id,side:a.side}); for(const u of a.units){ u.org=Math.max(0,u.org-UT[u.n].org*CP.STARVE_ORG); u.men*=1-CP.STARVE_MEN*a.starving; } this.note(`${a.name} 断粮第 ${a.starving} 日`,"bad");
+        if(a.starving>=CP.STARVE_COLLAPSE){ for(const u of a.units) u.gone=true; a.gone=true; this.note(`${a.name} 断粮 ${a.starving} 日，军中大饥，众溃而散`,"bad"); this.events.push({day:this.day,ph:this.ph,type:"collapse",army:a.id,side:a.side}); } } else a.starving=0; }
     // 夜间恢复与收拢
     for(const a of this.armies) for(const u of a.units){ if(u.gone) continue; const t=UT[u.n];
       if(u.routed){ if(this.rand()<CP.RALLY){ u.routed=false; u.org=t.org*0.35; u.men*=1-CP.RALLY_LOSS; } else { u.men*=0.6; if(u.men<100) u.gone=true; } continue; }
@@ -444,8 +501,9 @@ class Campaign{
     // 军团覆没
     for(const a of this.armies) if(!a.gone&&!this.alive(a)&&!a.units.some(u=>u.n==="辎重"&&!u.gone&&u.cargo>0)){ a.gone=true; this.note(`${a.name} 全军覆没/溃散`,"bad"); }
     this.armies=this.armies.filter(a=>!a.gone||true);
-    this.checkVictory(); this.snapshot(); this.day++; this.rollWeather(); this.pending=[]; if(!this.over) this.snapshot();
+    this.checkVictory(); this.snapshot(); this.ph=0; this.day++; this.rollWeather(); this.pending=[]; if(!this.over) this.snapshot();
     if(!this.over) this.note(`第 ${this.day} 日 · 天气 ${this.weather}`,"day");
+    for(const k in this.fought) if(this.fought[k]<this.day-1) delete this.fought[k];
   }
   supplyDepot(a){ let best=null;
     for(const n of Object.values(this.nodes)){ if(!n.depot||n.owner!==a.side||n.depot.food<=0) continue; const r=n.id===a.at?{days:0}:this.route(a.at,n.id,a.side,true); if(!r||r.days>CP.SUPPLY_RANGE) continue; if(!best||r.days<best.d) best={n,d:r.days}; }
@@ -466,8 +524,9 @@ class Campaign{
       if(ok){ this.over={side:v.side,text:v.text}; this.note(`战役结束：${this.sideName(v.side)}胜——${v.text}`,"big"); return; } } }
   /* ───── 战略 AI：见 StrategicAI ───── */
   aiOrders(side){ this.strat[side].decide(); }
-  save(){ return JSON.stringify({sc:this.sc,day:this.day,log:this.log,nodes:this.nodes,edges:this.edges,armies:this.armies,weather:this.weather,over:this.over,control:this.control,season:this.season,battles:this.battles,decisions:this.decisions,stats:this.stats,events:this.events,initMen:this.initMen,seed:this.seed,rs:this.rs,hist:this.hist,histFired:this.histFired,histDone:this.histDone,histPosture:this.histPosture,intelAll:this.intelAll,defected:this.defected,raidBonus:this.raidBonus}); }
-  static load(str){ const o=JSON.parse(str); const c=Object.create(Campaign.prototype); Object.assign(c,o); c.name=o.sc.name; c.sideInfo=o.sc.sides; c.pending=[];
+  save(){ return JSON.stringify({sc:this.sc,day:this.day,log:this.log,nodes:this.nodes,edges:this.edges,armies:this.armies,weather:this.weather,over:this.over,control:this.control,season:this.season,battles:this.battles,decisions:this.decisions,stats:this.stats,events:this.events,initMen:this.initMen,seed:this.seed,rs:this.rs,hist:this.hist,histFired:this.histFired,histDone:this.histDone,histPosture:this.histPosture,intelAll:this.intelAll,defected:this.defected,raidBonus:this.raidBonus,ph:this.ph,frames:this.frames,pending:this.pending.filter(e=>!e.done),fought:this.fought,near:this.near,alertAI:this.alertAI,reDecided:this.reDecided}); }
+  static load(str){ const o=JSON.parse(str); const c=Object.create(Campaign.prototype); Object.assign(c,o); c.name=o.sc.name; c.sideInfo=o.sc.sides; c.pending=o.pending||[];   // 未处理的交战随存档保存，重开页面后接着处理
     for(const k of ["battles","decisions","stats","events","histFired","defected"]) c[k]=c[k]||[]; c.hist=c.hist||{on:false,tend:0,anchors:[],outcomes:[]}; c.histDone=c.histDone||{}; c.intelAll=c.intelAll||{A:false,B:false}; if(c.rs==null){ c.seed=Math.floor(Math.random()*1e9); c.rs=c.seed; } c.initMen=c.initMen||{A:c.sideMen("A"),B:c.sideMen("B")};
+    c.ph=c.ph||0; c.frames=c.frames||[]; c.fought=c.fought||{}; c.near=c.near||{A:[],B:[]}; c.alertAI=c.alertAI||{A:false,B:false}; c.reDecided=c.reDecided||{A:false,B:false}; c.alerts=[];
     c.strat={A:new StrategicAI(c,"A"),B:new StrategicAI(c,"B")}; return c; }
 }
