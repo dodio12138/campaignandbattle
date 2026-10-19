@@ -1,6 +1,6 @@
 {
   "name": "campaignandbattle",
-  "version": "0.18.2",
+  "version": "0.18.3",
   "description": "汉末会战沙盘：回合制会战 + 战役大地图 + 战略 AI + 历史模式（单文件网页，无依赖）",
   "private": true,
   "scripts": {

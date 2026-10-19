@@ -27,7 +27,7 @@ $("#v-camp").innerHTML=`<div class="camp-grid">
     <div class="lbl" style="margin-top:4px">军团（点选后下达目标）</div><div id="cp-armies" class="cp-armies"></div>
     <div id="cp-orders"></div></div></section>
   <section class="card cp-mapcard"><div class="cp-map" id="cp-map"><svg id="cp-svg" viewBox="0 0 1000 800" role="img" aria-label="战役地图"></svg></div>
-    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>虚线箭头：行军路线</span></div></section>
+    <div class="legend cp-legend"><span><b class="lg city"></b>城</span><span><b class="lg camp"></b>营垒</span><span><b class="lg depot"></b>粮仓</span><span><b class="lg ford"></b>渡口</span><span>路旁数字：行军日数</span><span>⚔ 当日交战</span><span>箭头：进军路线</span><span>兵旗：主将 · 部数，下两条为兵员与组织</span></div></section>
   <div class="cp-report" id="cp-report" hidden></div>
   <section class="card cp-right"><h2>情报 <span class="lbl">军报</span></h2><div class="body"><div id="cp-info"></div><div class="lbl">战役日志（最新在上）</div><div class="log cp-log" id="cp-log"></div></div></section>
 </div>`;
@@ -105,20 +105,33 @@ function roadSeg(ia,a,ib,b){ const c=roadCurve(ia,a,ib,b), [c1,c2,e]=c.fw?[c.c1,
 function roadD(ia,a,ib,b){ return `M${a.x} ${a.y} `+roadSeg(ia,a,ib,b); }
 /* 从 a 往 b 走了 t（0–1）时所在的点 */
 function roadAt(ia,a,ib,b,t){ const c=roadCurve(ia,a,ib,b); return bezAt(c,c.fw?t:1-t); }
+/* 进军箭头：沿道路曲线的实心箭带——燕尾起、渐宽、宽箭头收尖（经典作战地图画法） */
+function marchArrow(st,N){
+  const pts=[]; for(let i=1;i<st.length;i++) for(let k=i===1?0:1;k<=16;k++) pts.push(roadAt(st[i-1],N[st[i-1]],st[i],N[st[i]],k/16));
+  const cum=[0]; for(let i=1;i<pts.length;i++) cum.push(cum[i-1]+Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y));
+  const L=cum[cum.length-1]; if(L<30) return "";
+  const at=d=>{ let i=1; while(i<cum.length-1&&cum[i]<d) i++; const f=(d-cum[i-1])/((cum[i]-cum[i-1])||1), a=pts[i-1], b=pts[i];
+    const tx=b.x-a.x, ty=b.y-a.y, tl=Math.hypot(tx,ty)||1; return {x:a.x+tx*f, y:a.y+ty*f, tx:tx/tl, ty:ty/tl}; };
+  const s0=Math.min(20,L*0.18), e0=Math.min(20,L*0.15), hl=Math.min(30,L*0.3), body=L-e0-hl;
+  const w0=3, w1=6.5, wh=13, n=Math.max(4,Math.round((body-s0)/10)), Lp=[], Rp=[];
+  for(let i=0;i<=n;i++){ const d=s0+(body-s0)*i/n, p=at(d), w=w0+(w1-w0)*i/n; Lp.push([p.x-p.ty*w,p.y+p.tx*w]); Rp.push([p.x+p.ty*w,p.y-p.tx*w]); }
+  const hb=at(body), tip=at(L-e0), t0=at(s0);
+  const wingL=[hb.x-hb.ty*wh,hb.y+hb.tx*wh], wingR=[hb.x+hb.ty*wh,hb.y-hb.tx*wh], notch=[t0.x+t0.tx*5,t0.y+t0.ty*5];
+  const all=[...Lp,wingL,[tip.x,tip.y],wingR,...Rp.reverse(),notch];
+  return "M"+all.map(([x,y])=>r1(x)+" "+r1(y)).join("L")+"Z"; }
 /* 地图 */
 function renderCampMap(){
   const c=camp, N=c.nodes; const svg=$("#cp-svg"); let h="";
-  h+=`<defs><pattern id="cpg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="var(--map-line,rgba(0,0,0,.06))" stroke-width="1"/></pattern>
-    <marker id="cpar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  h+=`<defs><pattern id="cpg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="var(--map-line,rgba(0,0,0,.06))" stroke-width="1"/></pattern></defs>
     <rect width="1000" height="800" fill="var(--map)"/><rect width="1000" height="800" fill="url(#cpg)"/>
 `;
   const mp=c.sc.map||(Object.values(CAMP_SCENARIOS).find(s=>s.name===c.sc.name)||{}).map||{};
   for(const r of mp.rivers||[]) h+=`<path d="${r.d}" fill="none" stroke="var(--river,#6f9bb8)" stroke-width="9" opacity=".55"/>${r.label?`<text x="${r.lx}" y="${r.ly}" class="cp-rl">${r.label}</text>`:""}`;
   for(const e of c.edges){ const a=N[e.a], b=N[e.b], d=roadD(e.a,a,e.b,b), m=roadAt(e.a,a,e.b,b,0.5); h+=`<path d="${d}" class="cp-road-bed"/><path d="${d}" class="cp-road"/><text x="${r1(m.x)}" y="${r1(m.y-6)}" class="cp-days">${e.d}</text>`; }
-  // 计划路线
+  // 计划路线：画在最上层（见末尾），这里只收集
+  let arrows="";
   for(const a of c.armies){ if(a.gone||!a.path.length) continue; if(c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B") continue;
-    const st=[a.at,...a.path]; let d=`M${N[st[0]].x} ${N[st[0]].y}`; for(let i=1;i<st.length;i++) d+=" "+roadSeg(st[i-1],N[st[i-1]],st[i],N[st[i]]);
-    h+=`<path d="${d}" class="cp-path ${a.side.toLowerCase()} ${a.id===campSel?"on":""}" marker-end="url(#cpar)"/>`; }
+    const d=marchArrow([a.at,...a.path],N); if(d) arrows+=`<path d="${d}" class="cp-march ${a.side.toLowerCase()} ${a.id===campSel?"on":""}"/>`; }
   for(const n of Object.values(N)){ const own=n.owner?n.owner.toLowerCase():"n"; const sel=campPick?" pick":"";
     let shape=""; if(n.type==="city") shape=`<rect x="-15" y="-15" width="30" height="30" class="cp-node ${own}"/><rect x="-9" y="-9" width="18" height="18" class="cp-node-in ${own}"/>`;
     else if(n.type==="camp") shape=`<rect x="-14" y="-14" width="28" height="28" class="cp-node camp ${own}"/>`;
@@ -132,9 +145,23 @@ function renderCampMap(){
     if(c.pending.some(e=>e.node===n.id&&!e.done)) h+=`<text x="${n.x+18}" y="${n.y-16}" class="cp-x">⚔</text>`; }
   // 军团棋子
   const stack={}; for(const a of c.armies){ if(a.gone) continue; let x,y; if(a.moving||(a.path.length&&a.prog>0)){ const nx=N[a.path[0]], fr=N[a.at], e=c.edge(a.at,a.path[0]); const f=Math.min(0.9,a.prog/e.d); ({x,y}=roadAt(a.at,fr,a.path[0],nx,f)); } else { x=N[a.at].x; y=N[a.at].y; }
-    const key=Math.round(x)+","+Math.round(y); const k=stack[key]=(stack[key]||0)+1; const dy=-34-(k-1)*24, dx=a.side==="A"?-74:8;
-    const cu=c.combatUnits(a).length;
-    h+=`<g class="cp-army ${a.side.toLowerCase()} ${a.id===campSel?"on":""}" data-army="${a.id}" transform="translate(${x+dx},${y+dy+ (a.side==="A"?0:0)})" tabindex="0" role="button" aria-label="${a.name}"><rect width="66" height="21" rx="2"/><text x="5" y="14" class="cp-an">${a.gen.name}</text><text x="61" y="14" class="cp-ac">${cu}${a.cargo>0?"·粮":""}</text>${a.mission.type==="fire"?`<text x="33" y="-3" class="cp-tag">火攻</text>`:a.mission.type==="raid"?`<text x="33" y="-3" class="cp-tag">截粮</text>`:a.mission.type==="escort"?`<text x="33" y="-3" class="cp-tag">运粮</text>`:a.mission.type==="delay"?`<text x="33" y="-3" class="cp-tag">阻击</text>`:""}</g>`; }
+    const key=Math.round(x)+","+Math.round(y); const k=stack[key]=(stack[key]||0)+1; const W=88, H=30, dy=-40-(k-1)*(H+5), dx=a.side==="A"?-W-6:6;
+    const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), ratio=Math.max(0,Math.min(1,men/(a.men0||men||1)));
+    const org=cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0, shaken=a.shaken>0;
+    const tag={fire:"火攻",raid:"截粮",escort:"运粮",delay:"阻击",attack:"进攻",reinforce:"增援",retreat:"撤回"}[a.mission.type];
+    const sur=esc((a.gen.name||"?")[0]), nm=esc(a.gen.name), sd=a.side.toLowerCase();
+    h+=`<g class="cp-army ${sd} ${a.id===campSel?"on":""} ${shaken?"shaken":""} ${a.path.length?"moving":""}" data-army="${a.id}" transform="translate(${r1(x+dx)},${r1(y+dy)})" tabindex="0" role="button" aria-label="${esc(a.name)}：${cus.length} 部，约 ${(men/10000).toFixed(1)} 万${shaken?"，军心动摇":""}">
+      <title>${esc(a.name)} · ${cus.length} 部 · ${(men/10000).toFixed(1)} 万 · 组织 ${Math.round(org*100)}%${shaken?" · 军心动摇":""}</title>
+      <rect class="ca-card" x="0" y="0" width="${W}" height="${H}"/>
+      <path class="ca-flag" d="M0 0H26L22 ${H/2}L26 ${H}H0Z"/>
+      <text class="ca-sur" x="11.5" y="${H/2+6}">${sur}</text>
+      <text class="ca-nm" x="30" y="13">${nm}</text>
+      <text class="ca-ct" x="${W-4}" y="13">${cus.length}部${a.cargo>0?"·粮":""}</text>
+      <rect class="ca-bar" x="30" y="19" width="${W-34}" height="3"/><rect class="ca-men" x="30" y="19" width="${r1((W-34)*ratio)}" height="3"/>
+      <rect class="ca-bar" x="30" y="24" width="${W-34}" height="2"/><rect class="ca-org" x="30" y="24" width="${r1((W-34)*Math.min(1,org))}" height="2"/>
+      ${tag?`<g class="ca-tag" transform="translate(${a.side==="A"?-31:W+3},${(H-13)/2})"><rect width="28" height="13"/><text x="14" y="10">${tag}</text></g>`:""}
+    </g>`; }
+  h+=`<g class="cp-arrows" aria-hidden="true">${arrows}</g>`;
   svg.innerHTML=h;
 }
 /* 交互 */

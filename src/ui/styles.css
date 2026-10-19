@@ -301,8 +301,6 @@ button.cp-army:focus-visible{outline:2px solid var(--brass)}
 #cp-svg .cp-dbar{fill:var(--panel-2);stroke:var(--rule)} #cp-svg .cp-dfill{fill:var(--brass)}
 #cp-svg .cp-n{cursor:pointer} #cp-svg .cp-n.pick .cp-node{stroke-width:4;filter:drop-shadow(0 0 3px var(--brass))} #cp-svg .cp-n:focus-visible .cp-node{stroke:var(--brass)}
 #cp-svg .cp-x{font-size:22px;fill:var(--bad)}
-#cp-svg .cp-army{cursor:pointer} #cp-svg .cp-army rect{stroke:var(--ink);stroke-width:1.2} #cp-svg .cp-army.a rect{fill:var(--ca)} #cp-svg .cp-army.b rect{fill:var(--cb)} #cp-svg .cp-army.on rect{stroke:var(--brass);stroke-width:3}
-#cp-svg .cp-an{font:700 12px var(--f-body,serif);fill:#fff} #cp-svg .cp-ac{font:600 11px var(--f-mono);fill:#fff;text-anchor:end} #cp-svg .cp-tag{font:700 10.5px var(--f-body,serif);text-anchor:middle;fill:var(--ink);paint-order:stroke;stroke:var(--map);stroke-width:3}
 /* ===== 主帅 · 战役报告 ===== */
 :root{--chart-a:#b33d2c;--chart-b:#3d6bb0}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--chart-a:#c4493b;--chart-b:#3f69a3}}
@@ -517,3 +515,22 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
 #cp-svg .cp-road{fill:none;stroke:var(--ink-2);stroke-width:2.5;opacity:.6;stroke-linecap:round;stroke-dasharray:none}
 #cp-svg .cp-path{stroke-linecap:round;stroke-linejoin:round}
 .ed-road{fill:none;stroke-linecap:round}
+
+/* 战役地图 · 兵旗卡片：左为阵营色燕尾旗（主将姓），右为纸色卡（主将、部数、兵员条、组织条） */
+#cp-svg .cp-army{cursor:pointer;--sd:var(--ca)} #cp-svg .cp-army.b{--sd:var(--cb)}
+#cp-svg .ca-card{fill:var(--panel);stroke:var(--sd);stroke-width:1.5;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.35))}
+#cp-svg .ca-flag{fill:var(--sd);stroke:rgba(0,0,0,.35);stroke-width:1}
+#cp-svg .ca-sur{font:900 17px var(--f-glyph);fill:#fff;text-anchor:middle}
+#cp-svg .ca-nm{font:700 12px var(--f-body);fill:var(--ink)}
+#cp-svg .ca-ct{font:600 10.5px var(--f-mono);fill:var(--ink-2);text-anchor:end}
+#cp-svg .ca-bar{fill:var(--panel-2);stroke:none} #cp-svg .ca-men{fill:var(--sd)} #cp-svg .ca-org{fill:var(--good)}
+#cp-svg .cp-army.shaken .ca-org{fill:var(--warn)} #cp-svg .cp-army.shaken .ca-card{stroke-dasharray:4 2}
+#cp-svg .ca-tag rect{fill:var(--panel);stroke:var(--brass);stroke-width:1} #cp-svg .ca-tag text{font:700 10px var(--f-body);fill:var(--brass);text-anchor:middle}
+#cp-svg .cp-army.on .ca-card{stroke:var(--brass);stroke-width:2.5;filter:drop-shadow(0 0 4px var(--brass))}
+#cp-svg .cp-army:hover .ca-card{fill:var(--panel-2)}
+#cp-svg .cp-army:focus-visible{outline:none} #cp-svg .cp-army:focus-visible .ca-card{stroke:var(--brass);stroke-width:2.5}
+/* 进军箭头：最上层、不挡点击；半透明阵营色箭带 + 深色描边，选中军团的箭头加深 */
+#cp-svg .cp-arrows{pointer-events:none}
+#cp-svg .cp-march{fill:var(--ca);fill-opacity:.5;stroke:color-mix(in srgb,var(--ca) 70%,#000);stroke-width:1.2;stroke-linejoin:round}
+#cp-svg .cp-march.b{fill:var(--cb);stroke:color-mix(in srgb,var(--cb) 70%,#000)}
+#cp-svg .cp-march.on{fill-opacity:.85;stroke-width:1.8}
