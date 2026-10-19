@@ -1,0 +1,555 @@
+{
+ "name": "合肥之战（建安二十年秋）",
+ "season": "秋",
+ "sides": {
+  "A": {
+   "name": "魏军",
+   "short": "魏",
+   "lord": {
+    "name": "张辽",
+    "cmd": 92,
+    "int": 82,
+    "persona": "进取"
+   }
+  },
+  "B": {
+   "name": "吴军",
+   "short": "吴",
+   "lord": {
+    "name": "孙权",
+    "cmd": 72,
+    "int": 74,
+    "persona": "均衡"
+   }
+  }
+ },
+ "calendar": {
+  "startDate": {
+   "year": "建安二十年",
+   "month": 8,
+   "day": 1
+  },
+  "dayScale": 1
+ },
+ "dynamicSeason": false,
+ "map": {
+  "rivers": [
+   {
+    "d": "M260 800 C300 720 420 690 520 700 S700 760 760 800",
+    "label": "巢湖",
+    "lx": 470,
+    "ly": 740
+   },
+   {
+    "d": "M420 0 C460 120 520 220 600 300 S760 380 1000 360",
+    "label": "施水",
+    "lx": 820,
+    "ly": 350
+   }
+  ]
+ },
+ "desc": "孙权率众十万围合肥。张辽、李典、乐进将七千余人屯合肥，曹公远征张鲁，留教曰：若孙权至者，张、李将军出战；乐将军守，护军勿得与战。吴军粮自濡须口运至城南营中；北归须渡逍遥津。",
+ "nodes": {
+  "shouchun": {
+   "name": "寿春",
+   "x": 430,
+   "y": 90,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 1,
+   "owner": "A",
+   "depot": {
+    "food": 80
+   }
+  },
+  "hefei": {
+   "name": "合肥城",
+   "x": 470,
+   "y": 380,
+   "type": "city",
+   "terrain": "平原",
+   "wall": 1,
+   "owner": "A",
+   "depot": {
+    "food": 45
+   }
+  },
+  "wuying": {
+   "name": "吴营·城南",
+   "x": 500,
+   "y": 560,
+   "type": "camp",
+   "terrain": "平原",
+   "fort": 1,
+   "owner": "B",
+   "depot": {
+    "food": 35
+   }
+  },
+  "xiaoyaojin": {
+   "name": "逍遥津",
+   "x": 720,
+   "y": 440,
+   "type": "ford",
+   "terrain": "平原",
+   "owner": null
+  },
+  "dongxing": {
+   "name": "东关",
+   "x": 760,
+   "y": 630,
+   "type": "road",
+   "terrain": "丘陵",
+   "owner": null
+  },
+  "ruxu": {
+   "name": "濡须口",
+   "x": 880,
+   "y": 740,
+   "type": "city",
+   "terrain": "丘陵",
+   "wall": 0.8,
+   "owner": "B",
+   "depot": {
+    "food": 100
+   }
+  }
+ },
+ "edges": [
+  [
+   "shouchun",
+   "hefei",
+   3
+  ],
+  [
+   "hefei",
+   "wuying",
+   1
+  ],
+  [
+   "hefei",
+   "xiaoyaojin",
+   1
+  ],
+  [
+   "wuying",
+   "xiaoyaojin",
+   1
+  ],
+  [
+   "xiaoyaojin",
+   "dongxing",
+   2
+  ],
+  [
+   "dongxing",
+   "ruxu",
+   2
+  ],
+  [
+   "wuying",
+   "dongxing",
+   4
+  ]
+ ],
+ "armies": [
+  {
+   "id": "C1",
+   "side": "A",
+   "name": "张辽 · 陷阵",
+   "gen": {
+    "name": "张辽",
+    "cmd": 92,
+    "int": 82,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FENGSHI"
+   },
+   "at": "hefei",
+   "home": "hefei",
+   "ai": "raider",
+   "roster": {
+    "轻骑": 2,
+    "重骑": 1,
+    "刀盾兵": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.4,
+    "goal": 0.25
+   },
+   "food": 5
+  },
+  {
+   "id": "C2",
+   "side": "A",
+   "name": "乐进·李典 · 守城",
+   "gen": {
+    "name": "乐进",
+    "cmd": 80,
+    "int": 65,
+    "persona": "谨慎",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "hefei",
+   "home": "hefei",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 3,
+    "长枪兵": 2,
+    "弓兵": 2,
+    "强弩兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "C3",
+   "side": "A",
+   "name": "寿春 · 留守",
+   "gen": {
+    "name": "温恢",
+    "cmd": 60,
+    "int": 75,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "YUAN"
+   },
+   "at": "shouchun",
+   "home": "shouchun",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 2,
+    "弓兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  },
+  {
+   "id": "W1",
+   "side": "B",
+   "name": "孙权 · 中军",
+   "retreatHome": "ruxu",
+   "gen": {
+    "name": "孙权",
+    "cmd": 72,
+    "int": 74,
+    "persona": "均衡",
+    "genPos": "rear",
+    "formation": "FANG"
+   },
+   "at": "wuying",
+   "home": "wuying",
+   "ai": "main",
+   "planTarget": "hefei",
+   "roster": {
+    "刀盾兵": 4,
+    "长枪兵": 2,
+    "弓兵": 2,
+    "强弩兵": 1,
+    "器械": 2
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.55
+   },
+   "food": 5
+  },
+  {
+   "id": "W2",
+   "side": "B",
+   "name": "吕蒙·甘宁 · 前部",
+   "gen": {
+    "name": "吕蒙",
+    "cmd": 86,
+    "int": 84,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "wuying",
+   "home": "wuying",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 5,
+    "长枪兵": 3,
+    "弓兵": 3,
+    "轻骑": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "W3",
+   "side": "B",
+   "name": "凌统 · 亲近",
+   "gen": {
+    "name": "凌统",
+    "cmd": 80,
+    "int": 62,
+    "persona": "进取",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "wuying",
+   "home": "wuying",
+   "ai": "reserve",
+   "roster": {
+    "刀盾兵": 2,
+    "长枪兵": 1,
+    "轻骑": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0.45
+   },
+   "food": 5
+  },
+  {
+   "id": "W4",
+   "side": "B",
+   "name": "运粮队",
+   "gen": {
+    "name": "运粮",
+    "cmd": 55,
+    "int": 45,
+    "persona": "均衡",
+    "genPos": "front",
+    "formation": "FANG"
+   },
+   "at": "ruxu",
+   "home": "ruxu",
+   "ai": "convoy",
+   "convoyTo": "wuying",
+   "roster": {
+    "刀盾兵": 1,
+    "辎重": 3
+   },
+   "mission": {
+    "type": "escort",
+    "target": "wuying",
+    "retreatAt": 0.4
+   },
+   "food": 5,
+   "cargo": 25
+  },
+  {
+   "id": "W5",
+   "side": "B",
+   "name": "濡须 · 留守",
+   "gen": {
+    "name": "蒋钦",
+    "cmd": 70,
+    "int": 60,
+    "persona": "谨慎",
+    "genPos": "rear",
+    "formation": "YUAN"
+   },
+   "at": "ruxu",
+   "home": "ruxu",
+   "ai": "garrison",
+   "roster": {
+    "刀盾兵": 2,
+    "弓兵": 1
+   },
+   "mission": {
+    "type": "hold",
+    "retreatAt": 0
+   },
+   "food": 5
+  }
+ ],
+ "maxDays": 30,
+ "history": {
+  "anchors": [
+   {
+    "id": "sortie",
+    "type": "order",
+    "side": "A",
+    "day": 2,
+    "army": "C1",
+    "mission": "raid",
+    "target": "wuying",
+    "retreatAt": 0.25,
+    "lock": 2,
+    "text": "辽夜募敢从之士，得八百人，椎牛飨将士。平旦，辽被甲持戟，先登陷陈"
+   },
+   {
+    "id": "luck1",
+    "type": "luck",
+    "side": "A",
+    "node": "wuying",
+    "day": 2,
+    "value": 2.4,
+    "text": "杀数十人，斩二将，大呼自名，冲垒入，至权麾下。权大惊，众不知所为"
+   },
+   {
+    "id": "duoqi",
+    "type": "morale",
+    "side": "B",
+    "trigger": "day:3",
+    "org": 0.15,
+    "desert": 0.02,
+    "text": "辽还修守备，众心乃安；吴人夺气"
+   },
+   {
+    "id": "siege",
+    "type": "posture",
+    "side": "B",
+    "until": 13,
+    "assaultMul": 0.35,
+    "text": "权守合肥十余日，城不可拔"
+   },
+   {
+    "id": "hold_A",
+    "type": "posture",
+    "side": "A",
+    "until": 13,
+    "noRaid": true,
+    "assaultMul": 0.2,
+    "text": "乐将军守，护军勿得与战"
+   },
+   {
+    "id": "plague",
+    "type": "morale",
+    "side": "B",
+    "day": 10,
+    "org": 0.1,
+    "desert": 0.03,
+    "text": "会疾疫，军旅皆已引出"
+   },
+   {
+    "id": "vanguard",
+    "type": "order",
+    "side": "B",
+    "day": 13,
+    "army": "W2",
+    "mission": "retreat",
+    "target": "ruxu",
+    "text": "权撤军，诸军先发"
+   },
+   {
+    "id": "withdraw",
+    "type": "order",
+    "side": "B",
+    "day": 14,
+    "army": "W1",
+    "mission": "retreat",
+    "target": "ruxu",
+    "text": "权与千余人在后，至逍遥津北"
+   },
+   {
+    "id": "chase",
+    "type": "order",
+    "side": "A",
+    "day": 14,
+    "army": "C1",
+    "mission": "attack",
+    "target": "xiaoyaojin",
+    "retreatAt": 0.35,
+    "text": "辽率诸军追击，几复获权"
+   },
+   {
+    "id": "luck2",
+    "type": "luck",
+    "side": "A",
+    "node": "xiaoyaojin",
+    "day": 14,
+    "value": 1.8,
+    "text": "权与吕蒙、蒋钦、凌统及宁等在津北为辽所袭"
+   },
+   {
+    "id": "chase2",
+    "type": "order",
+    "side": "A",
+    "day": 14,
+    "army": "C2",
+    "mission": "attack",
+    "target": "xiaoyaojin",
+    "retreatAt": 0.4,
+    "text": "李典、乐进从之"
+   },
+   {
+    "id": "lingtong",
+    "type": "order",
+    "side": "B",
+    "day": 14,
+    "army": "W3",
+    "mission": "reinforce",
+    "target": "xiaoyaojin",
+    "text": "凌统率亲近扶权出围，复还与辽战，左右尽死"
+   }
+  ],
+  "outcomes": [
+   {
+    "text": "张辽陷阵，破吴营",
+    "check": {
+     "type": "battle",
+     "node": "wuying",
+     "side": "A"
+    }
+   },
+   {
+    "text": "合肥城未失",
+    "check": {
+     "type": "nodeOwner",
+     "node": "hefei",
+     "owner": "A"
+    }
+   },
+   {
+    "text": "逍遥津魏军得胜",
+    "check": {
+     "type": "battle",
+     "node": "xiaoyaojin",
+     "side": "A"
+    }
+   },
+   {
+    "text": "孙权撤围退还（魏军胜）",
+    "check": {
+     "type": "winner",
+     "side": "A"
+    }
+   }
+  ]
+ },
+ "victory": [
+  {
+   "side": "A",
+   "type": "armyAt",
+   "army": "W1",
+   "node": "ruxu",
+   "text": "孙权撤围，退还濡须"
+  },
+  {
+   "side": "A",
+   "type": "armyGone",
+   "army": "W1",
+   "text": "孙权中军溃散"
+  },
+  {
+   "side": "B",
+   "type": "nodeOwner",
+   "node": "hefei",
+   "owner": "B",
+   "text": "攻克合肥"
+  },
+  {
+   "side": "B",
+   "type": "armyGone",
+   "army": "C2",
+   "text": "合肥守军覆没"
+  }
+ ]
+}

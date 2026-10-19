@@ -284,8 +284,10 @@ class Campaign{
     for(const a of this.armies){ a.arrived=false; a.met=false; a.moving=a.path.length&&a.prog>0?a.path[0]:null;
       if(a.gone||a.path.length) continue; const m=a.mission; const dest=m.type==="retreat"?(m.target||m.returnTo||a.home):(["attack","raid","fire","reinforce","escort","delay"].includes(m.type)?m.target:null);
       if(dest&&dest!==a.at){ const r=this.route(a.at,dest,a.side,m.type==="raid"||m.type==="escort"||m.type==="fire"); if(r){ a.path=r.path; this.markOrder(a); } } }
+    // 约期来日：昨日晚到而隔营相望之地，次日清晨双方都须先接战，不得趁晓先走（败者战后再退）
+    const pinned=new Set(); if(ph===1) for(const a of this.armies) if(a.lateArr&&!a.gone&&this.armies.some(b=>b.side!==a.side&&b.at===a.at&&!b.gone&&!b.moving&&this.alive(b))) pinned.add(a.at);
     for(const a of this.armies){ if(!this.alive(a)&&!(a.units.some(u=>u.n==="辎重"&&!u.gone))) continue; a.moved=false; if(!a.path.length) continue;
-      if((a.busy||0)>now||!this.marchPh(a).includes(ph)) continue;   // 交战未毕，或非行军时段（扎营）
+      if((a.busy||0)>now||!this.marchPh(a).includes(ph)||(pinned.has(a.at)&&!a.moving)) continue;   // 交战未毕、非行军时段（扎营）、或约战未打
       const nx=a.path[0], e=this.edge(a.at,nx); if(!e){ a.path=[]; continue; }
       a.prog+=this.speed(a)/MARCH_DAY.length; a.moving=nx; a.moved=true;
       if(a.prog>=e.d-1e-9){ a.prev=a.at; a.at=nx; a.path.shift(); a.prog=0; a.moving=null; a.arrived=true; a.siegeDays=0;
@@ -510,6 +512,7 @@ class Campaign{
       if(k.type==="depotBelow") ok=this.stats.some(d=>(d.depots[k.node]??Infinity)<=this.nodes[k.node].depot.food0*k.frac)||this.nodes[k.node].depot.food<=this.nodes[k.node].depot.food0*k.frac;
       else if(k.type==="fired") ok=this.events.some(e=>e.type==="fire"&&e.node===k.node&&e.f>0&&(!k.by||e.by===k.by));
       else if(k.type==="defected") ok=this.defected.includes(k.army); else if(k.type==="nodeOwner") ok=this.nodes[k.node].owner===k.owner; else if(k.type==="winner") ok=!!(this.over&&this.over.side===k.side);
+      else if(k.type==="battle") ok=this.battles.some(b=>b.node===k.node&&(b.winner===k.side||b.raidOk===k.side));   // 某地会战某方胜（或奇袭得手）
       return {text:o.text,ok}; }); return {list:res,score:res.length?res.filter(x=>x.ok).length/res.length:0}; }
   /* 日期：剧本起始日 + (日−1)×每回合天数 → 年月日 */
   dateOf(day){ const sd=this.hist.startDate; if(!sd) return `第 ${day} 日`; const t=(sd.day-1)+(day-1)*(this.hist.dayScale||1); const m=sd.month+Math.floor(t/30), d=t%30+1;
