@@ -381,15 +381,15 @@ nav.tabs button{padding:3px 12px;font-size:13px}
   .layout>aside{overflow-y:auto;min-height:0;align-content:start;padding-right:2px}
   .layout>main{min-height:0;display:flex;flex-direction:column}
   .layout>main>.view.on{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
-  #v-board .board-wrap{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px}
-  #v-board .map{flex:1;min-height:0;overflow:auto;display:flex}
-  #v-board .field{margin:auto;padding:8px 10px;gap:4px;min-width:0;width:max-content}
-  #v-board .gap{width:0;min-width:100%}
-  #v-board .rout-tray{width:0;min-width:100%;justify-content:center}
-  #v-board .board-wrap>.card{flex:0 0 auto}
-  #v-board .map{position:relative}
-  #v-board .banner{position:absolute;left:12px;right:12px;top:10px;margin:0;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.18)}
-  #v-board .log{max-height:132px}
+  .board-wrap{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px}
+  .board-wrap .map{flex:1;min-height:0;overflow:auto;display:flex}
+  .board-wrap .field{margin:auto;padding:8px 10px;gap:4px;min-width:0;width:max-content}
+  .board-wrap .gap{width:0;min-width:100%}
+  .board-wrap .rout-tray{width:0;min-width:100%;justify-content:center}
+  .board-wrap>.card{flex:0 0 auto}
+  .board-wrap .map{position:relative}
+  .board-wrap .banner{position:absolute;left:12px;right:12px;top:10px;margin:0;z-index:3;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+  .board-wrap .log{max-height:132px}
   .status{grid-column:auto}
 }
 @media (min-width:1100px) and (min-height:620px) and (max-width:1300px){
@@ -585,3 +585,31 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
 /* 小尖头：当下一步 */
 .cmap .cp-step{fill:var(--ca);stroke:color-mix(in srgb,var(--ca) 60%,#000);stroke-width:.6} .cmap .cp-step.b{fill:var(--cb);stroke:color-mix(in srgb,var(--cb) 60%,#000)}
 .ph-bar.mini{display:inline-grid;width:auto;font-size:10.5px} .ph-bar.mini span{padding:0 5px}
+/* 编辑器 · 战斗调试台：左编成、中战场、右调试与战况 */
+.wb{display:grid;grid-template-columns:330px minmax(0,1fr) 270px;gap:10px;align-items:start}
+.wb-left,.wb-right{display:grid;gap:10px;align-content:start;min-width:0}
+.wb-left .setup-grid{grid-template-columns:minmax(0,1fr)}
+.wb-main{min-width:0}
+.wb-right .status{display:grid;gap:10px}
+.dbg-unit{display:grid;gap:4px;border:1px solid var(--rule);padding:6px 8px;background:var(--panel-2);font-size:12.5px}
+@media (max-width:1200px){.wb{grid-template-columns:300px minmax(0,1fr)}.wb-right{grid-column:1/-1}}
+@media (max-width:760px){.wb{grid-template-columns:minmax(0,1fr)}}
+@media (min-width:1100px) and (min-height:620px){
+  #v-setup.on .wb{flex:1;min-height:0;align-items:stretch}
+  .wb-left,.wb-right{overflow-y:auto;min-height:0;padding-right:2px}
+  .wb-main{display:flex;flex-direction:column;min-height:0}
+  #v-setup.on{overflow:hidden!important}
+}
+body.vw #b-back,body.vw #b-side{display:none}
+/* 编辑器 · 战役沙盘 */
+.wb-camp{grid-template-columns:minmax(380px,36%) minmax(0,1fr) 270px}
+.wb-camp .ed-sec[data-sec=nodes] .ed-body{grid-template-columns:minmax(0,1fr)!important}
+.wb-camp .ed-sec[data-sec=nodes] .ed-body>.btn{grid-column:auto!important}
+.sb-card{display:flex;flex-direction:column;min-height:0}
+.sb-map{padding:4px;display:flex;justify-content:center;min-height:0;flex:1}
+.sb-map svg{width:100%;height:100%;max-height:calc(100vh - 290px)}
+#sb-log{max-height:170px;border-top:1px solid var(--rule)}
+.cmap .sb-pick{fill:none;stroke:var(--brass);stroke-width:3;stroke-dasharray:4 3}
+@media (min-width:1100px) and (min-height:620px){ #v-campedit.on .wb{flex:1;min-height:0;align-items:stretch} #v-campedit.on{overflow:hidden!important} .wb-camp .wb-main{display:flex;flex-direction:column;min-height:0} .wb-camp .sb-card{flex:1} }
+@media (max-width:1200px){.wb-camp{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media (max-width:900px){.wb-camp{grid-template-columns:minmax(0,1fr)}}

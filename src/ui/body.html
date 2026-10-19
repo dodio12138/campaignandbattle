@@ -14,7 +14,7 @@
     <button role="tab" aria-selected="false" data-mode="edit" data-view="v-batch" id="tab-batch" hidden>批量推演</button>
   </nav>
   <div class="sub" id="top-sub">选剧本开战役，或选战例打一场会战</div>
-  <span class="ver">v21 · 游玩 / 编辑器</span>
+  <span class="ver">v22 · 游玩 / 编辑器</span>
 </header>
 
 <div class="layout">
@@ -83,7 +83,9 @@
     <div class="view" id="v-camp"></div>
 
     <div class="view" id="v-setup">
-      <div class="toolbar" style="margin-bottom:10px"><span class="lbl">战斗编辑 · 当前战例的编成、地形、模式与 AI；改动即时生效于下一场</span><span class="sp"></span><button class="btn primary" id="se-try">在战场试演</button></div>
+      <div class="wb">
+        <div class="wb-left">
+          <div class="toolbar"><span class="lbl">战斗编辑 · 改动即时重新布阵</span><span class="sp"></span><button class="btn sm" id="se-try" title="到游玩模式的战场里试演">到游玩里试演</button></div>
       <div class="setup-grid">
     <section class="card">
       <h2>战场 <span class="lbl">BATTLEFIELD</span></h2>
@@ -104,9 +106,18 @@
     <section class="card side-card a" id="side-A"></section>
     <section class="card side-card b" id="side-B"></section>
       </div>
+        </div>
+        <div class="wb-main" id="se-board"></div>
+        <div class="wb-right"><section class="card" id="dbg"></section></div>
+      </div>
     </div>
 
-    <div class="view" id="v-campedit"><section class="card ed-card" id="camp-setup"></section></div>
+    <div class="view" id="v-campedit"><div class="wb wb-camp">
+      <div class="wb-left"><section class="card ed-card" id="camp-setup"></section></div>
+      <div class="wb-main"><section class="card sb-card"><h2>沙盘试推 <span class="lbl" id="sb-time"></span></h2><div class="sb-map"><svg id="sb-svg" class="cmap" viewBox="0 0 1000 800" role="img" aria-label="战役沙盘"></svg></div>
+        <div class="log cp-log" id="sb-log"></div></section></div>
+      <div class="wb-right"><section class="card" id="sb-dbg"></section></div>
+    </div></div>
 
     <div class="view" id="v-batch">
       <section class="card">

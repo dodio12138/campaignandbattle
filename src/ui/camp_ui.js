@@ -94,21 +94,22 @@ function renderCampInfo(){
     <div class="lbl" style="margin-top:6px">每日军粮消耗</div>${["A","B"].map(s=>`<div class="note">${c.sideName(s)}：${c.armies.filter(a=>a.side===s&&!a.gone).reduce((t,a)=>t+c.eat(a),0).toFixed(1)} / 日</div>`).join("")}
     <div class="lbl" style="margin-top:6px">胜负条件</div>${c.sc.victory.map(v=>`<div class="note">${c.sideName(v.side)}胜：${v.text}</div>`).join("")}`;
 }
+/* 军团图层：示意大箭头（下令时定格）、小尖头（当下一步）、兵旗。hide(a) 为真则不画该军团的箭头 */
+function armyLayers(c,sel,hide){ const N=c.nodes; let arrows="", steps="";
+  for(const a of c.armies){ if(a.gone||!a.path.length||(hide&&hide(a))) continue; const sd=a.side.toLowerCase(), rt=a.mission.type==="retreat"?" retreat":"";
+    if(a.order&&a.order.seq.length>1){ const d=marchArrow(a.order.seq,N); if(d) arrows+=`<path d="${d}" class="cp-march ${sd}${rt} ${a.id===sel?"on":""}"><title>${esc(a.name)}：第 ${a.order.day} 日${PERIODS[a.order.ph].n}受令</title></path>`; }
+    const st=stepArrow(c,a.at,a.path[0],a.prog); if(st) steps+=`<path d="${st}" class="cp-step ${sd}"/>`; }
+  const flags=c.armies.filter(a=>!a.gone).map(a=>{ const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), p=armyXY(N,a.at,a.path[0],a.prog,a.path[0]?c.edge(a.at,a.path[0]).d:1);
+    return {...p,side:a.side,gen:a.gen.name,name:a.name,id:a.id,n:cus.length,men,ratio:men/(a.men0||men||1),org:cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0,
+      shaken:a.shaken>0,tag:MISSION_TAG[a.mission.type],cargo:a.cargo>0,on:a.id===sel}; });
+  return flagsSVG(flags,{interactive:true})+`<g class="cp-arrows" aria-hidden="true">${arrows}${steps}</g>`; }
 /* 地图（绘制函数见 map_svg.js） */
 function renderCampMap(){
   const c=camp, N=c.nodes; let h=mapBaseSVG({sc:c.sc,nodes:N,edges:c.edges,interactive:true,pick:campPick});
   for(const e of c.pending) if(!e.done){ const n=N[e.node]; h+=`<text x="${n.x+18}" y="${n.y-16}" class="cp-x">⚔</text>`; }
-  // 进军箭头：画在最上层（玩家扮演甲方时，不显示乙方未被选中的路线）
-  let arrows="", steps="";
-  for(const a of c.armies){ if(a.gone||!a.path.length) continue; if(c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B") continue;
-    const sd=a.side.toLowerCase(), rt=a.mission.type==="retreat"?" retreat":"";
-    if(a.order&&a.order.seq.length>1){ const d=marchArrow(a.order.seq,N); if(d) arrows+=`<path d="${d}" class="cp-march ${sd}${rt} ${a.id===campSel?"on":""}"><title>${esc(a.name)}：第 ${a.order.day} 日${PERIODS[a.order.ph].n}受令</title></path>`; }   // 示意大箭头：下令时定格
-    const st=stepArrow(c,a.at,a.path[0],a.prog); if(st) steps+=`<path d="${st}" class="cp-step ${sd}"/>`; }   // 小尖头：当下这一步，逐时段更新
-  const flags=c.armies.filter(a=>!a.gone).map(a=>{ const cus=c.combatUnits(a), men=cus.reduce((t,u)=>t+u.men,0), p=armyXY(N,a.at,a.path[0],a.prog,a.path[0]?c.edge(a.at,a.path[0]).d:1);
-    return {...p,side:a.side,gen:a.gen.name,name:a.name,id:a.id,n:cus.length,men,ratio:men/(a.men0||men||1),org:cus.length?cus.reduce((t,u)=>t+Math.max(0,u.org)/UT[u.n].org,0)/cus.length:0,
-      shaken:a.shaken>0,tag:MISSION_TAG[a.mission.type],cargo:a.cargo>0,on:a.id===campSel}; });
-  h+=flagsSVG(flags,{interactive:true})+`<g class="cp-arrows" aria-hidden="true">${arrows}${steps}</g>`;
-  $("#cp-svg").innerHTML=h;
+  // 玩家扮演甲方时，不显示乙方未被选中的路线
+  const hide=a=>c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B";
+  $("#cp-svg").innerHTML=h+armyLayers(c,campSel,hide);
 }
 /* 交互 */
 $("#v-camp").addEventListener("click",e=>{
@@ -217,7 +218,7 @@ const TERRS=["平原","丘陵","隘口"], SEASONS=["春","夏","秋","冬"];
 const V_TYPE={armyAt:"军团抵达",armyGone:"军团溃散",nodeOwner:"占领据点"};
 const edOpen=new Set(["base"]);
 const esc=v=>String(v??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
-function scSave(){ try{ localStorage.setItem(SC_KEY,JSON.stringify(CAMP_SCENARIOS)); localStorage.setItem(CAMP_CFG_KEY,JSON.stringify(campCfg)); }catch(x){} }
+function scSave(){ try{ localStorage.setItem(SC_KEY,JSON.stringify(CAMP_SCENARIOS)); localStorage.setItem(CAMP_CFG_KEY,JSON.stringify(campCfg)); }catch(x){} if(window.sbDirty) sbDirty(); }   // 编辑即重建沙盘
 function curSc(){ return CAMP_SCENARIOS[campCfg.scenario]; }
 function isBuiltin(k){ return !!CAMP_SC_DEFAULT[k]; }
 /* 校验：引用的据点、军团是否存在；两军是否各有兵 */
@@ -299,7 +300,8 @@ function bindEdMap(){ const svg=$("#ed-map"); if(!svg) return; let drag=null;
   const end=()=>{ if(drag){ drag=null; scSave(); } }; svg.addEventListener("pointerup",end); svg.addEventListener("pointercancel",end); }
 const EDV=$("#v-campedit");
 EDV.addEventListener("toggle",e=>{ const d=e.target.closest&&e.target.closest("details.ed-sec"); if(d){ if(d.open) edOpen.add(d.dataset.sec); else edOpen.delete(d.dataset.sec); } },true);
-EDV.addEventListener("change",e=>{ const t=e.target; const sc=curSc(); let rebuild=false, save=true;
+EDV.addEventListener("change",e=>{ const t=e.target; if(t.closest("#sb-dbg")) return;   // 沙盘调试面板自有处理（camp_lab.js）
+  const sc=curSc(); let rebuild=false, save=true;
   if(t.id==="cs-sc"){ campCfg.scenario=t.value; rebuild=true; }
   else if(t.id==="cs-hist") campCfg.history=t.checked; else if(t.id==="cs-tend") campCfg.tendency=(+t.value)/100; else if(t.id==="cs-seed") campCfg.seed=t.value.replace(/\D/g,"");
   else if(t.dataset.an!=null){ const a=sc.history.anchors[+t.dataset.an]; if(t.dataset.g==="on"){ if(t.checked) delete a.off; else a.off=true; t.closest("tr").classList.toggle("off",!t.checked); } else a.weight=Math.max(0,+t.value||0); }

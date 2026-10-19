@@ -3,7 +3,7 @@ const PLAY_KEY="hm-play-v1";
 const PLAY={
   pref:"A", bsel:2, bfilter:"全部", csel:null, cside:"A",   // 大厅里的选择（记在本浏览器）
   battleSide:null, battleIn:false, campIn:false, fromEdit:false,           // 本次会话的进行状态
-  get side(){ const cl=window.campLink;                     // 当前战场上玩家指挥的一方（null = 观战）
+  get side(){ const cl=window.campLink; if(document.body.classList.contains("vw")) return null;   // 编辑器调试台：两军都可调                     // 当前战场上玩家指挥的一方（null = 观战）
     if(cl&&camp){ const e=cl.e; return camp.control[e.att]==="player"?"A":camp.control[e.def]==="player"?"B":null; }
     return this.battleIn?this.battleSide:null; },
 };
