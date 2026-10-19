@@ -16,6 +16,7 @@
 ```bash
 # 需要 Node.js 18+
 npm run build        # 生成 dist/index.html（直接用浏览器打开）、dist/artifact.html 和控件样板 dist/ui-kit.html
+npm run serve        # 本地预览 http://localhost:8848（不缓存，构建后刷新即见）
 npm test             # 回归测试（战役能打完、同种子可复现、历史模式吻合度、烧仓/截粮/火攻规则）
 npm run sim -- YILING 50 --history 0.8      # 命令行批量推演
 npm run sim -- GUANDU --log 1003 --history 1 # 打印某一局的完整日志

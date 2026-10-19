@@ -1,13 +1,14 @@
 {
   "name": "campaignandbattle",
-  "version": "0.18.1",
+  "version": "0.18.2",
   "description": "汉末会战沙盘：回合制会战 + 战役大地图 + 战略 AI + 历史模式（单文件网页，无依赖）",
   "private": true,
   "scripts": {
     "build": "node tools/build.js",
     "test": "node --test tests/*.test.js",
     "sim": "node tools/sim.js",
-    "export-scenarios": "node tools/export-scenarios.js"
+    "export-scenarios": "node tools/export-scenarios.js",
+    "serve": "python3 tools/serve.py"
   },
   "engines": { "node": ">=18" }
 }

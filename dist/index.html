@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- campaignandbattle v0.18.1 · 由 tools/build.js 生成，请勿直接修改，改 src/ 后重新构建 -->
+<!-- campaignandbattle v0.18.2 · 由 tools/build.js 生成，请勿直接修改，改 src/ 后重新构建 -->
 </head>
 <body>
 <title>汉末会战沙盘</title>
@@ -548,7 +548,7 @@ input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
     <button role="tab" aria-selected="false" data-mode="edit" data-view="v-batch" id="tab-batch" hidden>批量推演</button>
   </nav>
   <div class="sub" id="top-sub">选剧本开战役，或选战例打一场会战</div>
-  <span class="ver">v18.1 · 游玩 / 编辑器</span>
+  <span class="ver">v18.2 · 游玩 / 编辑器</span>
 </header>
 
 <div class="layout">
@@ -3972,6 +3972,7 @@ const PLAY={
     if(cl&&camp){ const e=cl.e; return camp.control[e.att]==="player"?"A":camp.control[e.def]==="player"?"B":null; }
     return this.battleIn?this.battleSide:null; },
 };
+window.PLAY=PLAY;   // const 不会挂到 window 上；main.js / camp_ui.js 通过 window.PLAY 判断
 try{ const o=JSON.parse(localStorage.getItem(PLAY_KEY)||"null"); if(o) for(const k of ["pref","bsel","bfilter","csel","cside"]) if(k in o) PLAY[k]=o[k]; }catch(e){}
 function playSave(){ try{ localStorage.setItem(PLAY_KEY,JSON.stringify({pref:PLAY.pref,bsel:PLAY.bsel,bfilter:PLAY.bfilter,csel:PLAY.csel,cside:PLAY.cside})); }catch(e){} }
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -3997,13 +3998,13 @@ function scTroops(sc,s){ let n=0; for(const a of sc.armies) if(a.side===s) for(c
 function renderCLobby(){
   const el=$("#v-clobby"); if(!CAMP_SCENARIOS[PLAY.csel]) PLAY.csel=campCfg.scenario;
   const key=PLAY.csel, sc=CAMP_SCENARIOS[key], errs=scValidate(sc);
-  const cont=camp&&!camp.over;
+  const cont=!!camp;
   const who=c=>{ const p=["A","B"].filter(s=>c.control[s]==="player"); return p.length?`你指挥 ${p.map(s=>c.sideName(s)).join("、")}`:"观战"; };
   const vsSide=s=>{ const L=sc.sides[s].lord||{}; return `<div class="vs-side ${s.toLowerCase()}"><b>${esc(sc.sides[s].name)}</b><span>${esc(L.name||"")} · 统 ${L.cmd??"—"} / 智 ${L.int??"—"} · ${esc(L.persona||"")}</span><span class="note">${sc.armies.filter(a=>a.side===s).length} 支军团 · 约 ${(scTroops(sc,s)/10).toFixed(1)} 万</span></div>`; };
   const dt=sc.calendar&&sc.calendar.startDate&&sc.calendar.startDate.year?`${sc.calendar.startDate.year} ${sc.calendar.startDate.month}月`:sc.season||"";
   el.innerHTML=`<div class="lobby">
     <section class="card"><h2>选择剧本 <span class="lbl">CAMPAIGN</span></h2><div class="body">
-      ${cont?`<div class="cp-eng"><div><b>当前进度：${esc(camp.name)}</b> <span class="note">第 ${camp.day} 日 · ${who(camp)}${camp.hist&&camp.hist.on?" · 历史模式":""}</span></div><div class="cp-eb"><button class="btn primary" id="cl-cont">继续战役</button></div></div>`:""}
+      ${cont?`<div class="cp-eng"><div><b>${camp.over?"上一局":"当前进度"}：${esc(camp.name)}</b> <span class="note">第 ${camp.day} 日 · ${who(camp)}${camp.hist&&camp.hist.on?" · 历史模式":""}${camp.over?" · 已结束":""}</span></div><div class="cp-eb"><button class="btn${camp.over?"":" primary"}" id="cl-cont">${camp.over?"查看战果":"继续战役"}</button></div></div>`:""}
       <div class="pick-list">${Object.entries(CAMP_SCENARIOS).map(([k,v])=>`<button type="button" class="pick ${k===key?"on":""}" data-sc="${k}"><span class="nm">${esc(v.name)}</span><span class="st">${esc(v.sides.A.name)} 對 ${esc(v.sides.B.name)} · ${v.armies.length} 支军团${isBuiltin(k)?"":" · 自定义"}${v.history?" · 可用历史模式":""}</span></button>`).join("")}</div>
       <button type="button" class="linkbtn" data-goto="v-campedit">新建或修改剧本：编辑器 · 战役编辑 →</button>
     </div></section>
