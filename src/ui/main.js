@@ -234,7 +234,7 @@ function renderBrief(){ const el=$("#brief"); if(!el||!battle) return; const b=b
     ${cl?`<div class="controls" style="padding:0"><button class="btn${b.done?" primary":""}" id="b-camp-ret">${b.done?"返回战役 · 结算":"速决余下并返回战役"}</button></div>`:`<button class="linkbtn" data-goto="v-setup">在编辑器中调整兵力、目标与天气 →</button>`}</div></section>`+(window.cmdHTML?cmdHTML(b):"")+side(b.A)+side(b.B); }
 document.addEventListener("click",e=>{ const g=e.target.closest("[data-goto]"); if(g) showView(g.dataset.goto); });
 function render(){
-  if(!battle) return; renderBrief();
+  if(!battle) return; renderBrief(); if(document.body.classList.contains("vw")) renderDebug();
   fitSlot();
   renderSide(battle.A); renderSide(battle.B); renderHint();
   $("#rnd").textContent=battle.dayRound+(battle.days>1?"":"");
@@ -376,8 +376,8 @@ function renderStatus(){
 }
 function makeAIs(sp){ const ais={}; for(const k of ["A","B"]){ const a=sp[k].ai; if(a&&a.on) ais[k]=new TacticalAI(k,{persona:a.persona,forced:a.forced||null}); } return ais; }
 let aiSeen={A:0,B:0};
-function resetBattle(){
-  stop(); battle=new Battle(spec,spec.seed); attachRoundAI(battle,makeAIs(spec)); aiSeen={A:0,B:0}; logRows=[]; selected=null;
+function resetBattle(seed){
+  stop(); const sd=seed??spec.seed??Math.floor(Math.random()*1e9); battle=new Battle(spec,sd); battle.seedUsed=sd; attachRoundAI(battle,makeAIs(spec)); aiSeen={A:0,B:0}; logRows=[]; selected=null;
   logRows.push({r:"00", h:`${spec.mode==="遭遇"?"两军行军中遭遇于":"两军列阵于"}${spec.terrain}，${({"决战":"决战","攻守":SIDE_NAME.A+"来攻","遭遇":"各部抢先展开","阵地":SIDE_NAME.A+"攻营","围城":SIDE_NAME.A+"攻城"}[spec.mode]||spec.mode)}，预定 ${battle.days} 日。正面宽 ${battle.terr.width}，两翼各 ${battle.terr.wing/2} 格。`});
   render();
 }
@@ -463,7 +463,7 @@ $("#field").addEventListener("click",e=>{
   if(!c) return; selected=selected===c.dataset.id?null:c.dataset.id; render();});
 document.addEventListener("keydown",e=>{
   const tg=e.target; if(tg&&(tg.tagName==="INPUT"||tg.tagName==="SELECT"||tg.tagName==="TEXTAREA"||tg.isContentEditable)) return; if(e.ctrlKey||e.metaKey||e.altKey) return;
-  if(!document.body.classList.contains("vb")) return;   // 快捷键只在战场生效
+  if(!document.body.classList.contains("vb")&&!document.body.classList.contains("vw")) return;   // 快捷键只在战场与调试台生效
   const m=e.code.match(/^Digit([1-8])$/); if(m){ const id=FORM_IDS[+m[1]-1]; if(id){ e.preventDefault(); applyForm(e.shiftKey?"B":"A",id); flashHint(`${e.shiftKey?"乙":"甲"}军改列${FORM[id].name}阵`); } return; }
   const key=e.key.toLowerCase();
   if(canDeploy()&&selected){ const k=selected[0]; const sd=battle[k];
@@ -491,13 +491,59 @@ function showView(id){
   lastView[curMode]=tabId;
   for(const x of document.querySelectorAll("nav.tabs button")) x.setAttribute("aria-selected",x===tb);
   for(const v of document.querySelectorAll(".view")) v.classList.toggle("on",v.id===id);
-  document.body.classList.toggle("vb",id==="v-board");
-  if(id!=="v-board") stop(); else requestAnimationFrame(()=>{ fitSlot(); render(); });
+  const wb=id==="v-setup"; document.body.classList.toggle("vb",id==="v-board"); document.body.classList.toggle("vw",wb); placeBoard(wb);
+  if(id!=="v-board"&&!wb) stop(); else { render(); requestAnimationFrame(()=>{ fitSlot(); render(); }); }   // 先同步画一次（窗口不可见时 rAF 不触发）
   if(id==="v-camp"&&window.renderCamp) renderCamp();
   if(window.onView) window.onView(id);
 }
 document.querySelector("nav.tabs").addEventListener("click",e=>{ const b=e.target.closest("button[data-view]"); if(b) showView(b.dataset.view); });
 document.querySelector("nav.modes").addEventListener("click",e=>{ const b=e.target.closest("button[data-mode]"); if(!b||b.dataset.mode===curMode) return; setMode(b.dataset.mode); showView(lastView[b.dataset.mode]); });
+
+/* ---------- 编辑器 · 战斗调试台：战场挪进「战斗编辑」中栏，右栏放调试面板与战况 ---------- */
+const boardWrap=document.querySelector("#v-board .board-wrap"), statusEl=$("#status"), statusHome=statusEl.parentNode;
+function placeBoard(wb){ if(wb){ if(boardWrap.parentNode.id!=="se-board"){ $("#se-board").appendChild(boardWrap); $(".wb-right").appendChild(statusEl); } }
+  else if(boardWrap.parentNode.id==="se-board"){ $("#v-board").appendChild(boardWrap); statusHome.appendChild(statusEl); } }
+/* 快进：不播动画，逐回合推进到条件成立 */
+function fastStep(until){ stop(); let n=0; while(battle&&!battle.done&&n++<2000){ battle.step(); pushLog(); if(until&&until()) break; } render(); }
+let dbgBatch=null, dbgN=200;
+function renderDebug(){ const el=$("#dbg"); if(!el||!battle) return; const ae=document.activeElement; if(ae&&el.contains(ae)&&(ae.tagName==="INPUT"||ae.tagName==="SELECT")) return;   // 正在输入时不重绘
+  const b=battle, u=selected&&[...b.A.units,...b.B.units].find(x=>x.id===selected);
+  const ue=u?`<div class="dbg-unit"><b>${SIDE_NAME[u.side.name]} · ${u.name}${u.isGeneral?" · 中军":""}</b>${u.routed?' <span class="cbad">已溃</span>':""}
+      <label class="prow"><span>兵员<small>上限 ${u.maxMen}</small></span><input type="number" data-ue="men" value="${Math.round(u.men)}"></label>
+      <label class="prow"><span>组织度<small>上限 ${u.maxOrg}</small></span><input type="number" data-ue="org" step="0.5" value="${Math.max(0,u.org).toFixed(1)}"></label>
+      <label class="prow"><span>体力<small>0–100</small></span><input type="number" data-ue="stamina" value="${Math.round(u.stamina)}"></label>
+      <div class="note">改动只作用于这一场，重新布阵即恢复。</div></div>`:`<div class="note">点战场上的兵牌，可直接改它的兵员、组织度、体力。</div>`;
+  el.innerHTML=`<h2>调试 <span class="lbl">DEBUG</span></h2><div class="body">
+    <div class="form-row"><span class="lbl">随机种子</span><input id="dbg-seed" class="mono" inputmode="numeric" placeholder="留空则每次随机" value="${spec.seed??""}"></div>
+    <div class="toolbar"><button class="btn sm" id="dbg-same" title="用本场的种子重来，结果完全相同">同种子重来</button><button class="btn sm" id="dbg-new" title="清除固定种子，换一个随机种子重来">换种子</button><span class="note mono">本场 ${b.seedUsed}</span></div>
+    <div><div class="lbl">快进</div><div class="toolbar"><button class="btn sm" data-jump="ph">下一时段</button><button class="btn sm" data-jump="day">下一日</button><button class="btn sm" data-jump="end">到结束</button></div>
+      <div class="note">${b.done?"已结束："+(b.endReason||(b.winner?"溃败":"相持")):`${b.timeText()} · 回合 ${b.rnd} · 已用 ${b.periodsUsed} 时段`}</div></div>
+    <div><div class="lbl">选中兵牌</div>${ue}</div>
+    <div><div class="lbl">快速批量（种子 1–N，用当前编成）</div><div class="toolbar"><select id="dbg-n" aria-label="场数">${[50,200,500].map(n=>`<option ${n===dbgN?"selected":""}>${n}</option>`).join("")}</select><button class="btn sm primary" id="dbg-batch">${dbgBatch&&dbgBatch.running?"推演中…":"开始"}</button><div class="progress" style="flex:1;min-width:60px"><i id="dbg-prog" style="width:${dbgBatch?dbgBatch.pct:0}%"></i></div></div>
+      <div id="dbg-bres">${dbgBatch&&dbgBatch.html||""}</div><button type="button" class="linkbtn" data-goto="v-batch">完整批量推演（直方图、兵种损失）→</button></div>
+  </div>`; }
+function quickBatch(N){ if(dbgBatch&&dbgBatch.running) return; const s0=JSON.parse(JSON.stringify(spec)); delete s0.seed; const res=[]; dbgBatch={running:true,pct:0,html:""}; renderDebug();
+  const chunk=()=>{ const t0=performance.now(); while(res.length<N&&performance.now()-t0<30){ const i=res.length, bt=new Battle(s0,i+1); attachRoundAI(bt,makeAIs(s0)); const r=bt.run(); res.push({r,per:bt.periodsUsed,day:bt.day}); }
+    dbgBatch.pct=res.length/N*100; const pr=$("#dbg-prog"); if(pr) pr.style.width=dbgBatch.pct+"%";
+    if(res.length<N){ setTimeout(chunk,0); return; }
+    const n=res.length, f=k=>res.filter(x=>x.r.winner===k).length/n, avg=g=>res.reduce((t,x)=>t+g(x),0)/n, why={};
+    for(const x of res){ const k=x.r.reason; why[k]=(why[k]||0)+1; }
+    dbgBatch={running:false,pct:100,html:`<div class="stack">${[["A",f("A")],["相持",f("相持")],["B",f("B")]].filter(x=>x[1]>0).map(([k,v])=>`<div style="width:${v*100}%;background:${k==="A"?"var(--a)":k==="B"?"var(--b)":"var(--ink-2)"}">${Math.round(v*100)}%</div>`).join("")}</div>
+      <dl class="kv"><dt>甲胜 / 相持 / 乙胜</dt><dd>${Math.round(f("A")*100)} / ${Math.round(f("相持")*100)} / ${Math.round(f("B")*100)}%</dd><dt>平均回合 · 时段 · 日</dt><dd>${avg(x=>x.r.rounds).toFixed(1)} · ${avg(x=>x.per).toFixed(1)} · ${avg(x=>x.day).toFixed(1)}</dd>
+      <dt>甲损 / 乙损</dt><dd>${pct(avg(x=>x.r.A.loss))} / ${pct(avg(x=>x.r.B.loss))}</dd></dl>
+      <div class="flags">${Object.entries(why).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,v])=>`<span>${k} ${Math.round(v/n*100)}%</span>`).join("")}</div>`};
+    renderDebug(); };
+  chunk(); }
+$("#v-setup").addEventListener("click",e=>{ const t=e.target;
+  if(t.id==="dbg-same"){ resetBattle(battle.seedUsed); return; }
+  if(t.id==="dbg-new"){ delete spec.seed; resetBattle(); return; }
+  if(t.id==="dbg-batch"){ quickBatch(+$("#dbg-n").value); return; }
+  const j=t.closest("[data-jump]"); if(j){ const b=battle; if(j.dataset.jump==="ph"){ const c0=b.clock; fastStep(()=>b.clock!==c0); } else if(j.dataset.jump==="day"){ const d0=b.day; fastStep(()=>b.day!==d0); } else { fastStep(null); playRetreat(); } return; } });
+$("#v-setup").addEventListener("change",e=>{ const t=e.target;
+  if(t.id==="dbg-n"){ dbgN=+t.value; return; }
+  if(t.id==="dbg-seed"){ const v=t.value.trim(); if(/^\d+$/.test(v)) spec.seed=+v; else delete spec.seed; resetBattle(); return; }
+  const k=t.dataset&&t.dataset.ue; if(k&&selected){ const u=[...battle.A.units,...battle.B.units].find(x=>x.id===selected); const v=parseFloat(t.value); if(!u||!isFinite(v)) return;
+    if(k==="men") u.men=Math.max(0,Math.min(u.maxMen,v)); else if(k==="org") u.org=Math.max(0,Math.min(u.maxOrg,v)); else if(k==="stamina") u.stamina=Math.max(0,Math.min(100,v)); render(); } });
 
 /* ---------- 批量推演 ---------- */
 let batchRunning=false;
