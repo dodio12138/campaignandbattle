@@ -71,7 +71,7 @@
 | 文字链接 | `<button class="linkbtn">` | 跳转到别的页面（如「在编辑器中调整 →」） |
 | 分段选择 | `<div class="seg"><button aria-pressed="true">…` | 2–6 个互斥选项且都要一眼看到（地形、模式、阵营） |
 | 下拉 | `select.full` / `.form-row select` | 选项多于 6 个 |
-| 滑杆 | `.slider-row`：`标签 · range · output` | 连续数值；`output` 用等宽字 |
+| 滑杆 | `.slider-row`：`标签 · range · output` | 连续数值；`output` 用等宽字；阵营色由外层 `--side` 决定 |
 | 计数器 | `.step`：`− input +` | 整数部数 |
 | 勾选 | `<label class="chk"><input type="checkbox"> 文字</label>` | 开关 |
 | 小标签 | `.lbl` | 字段名、分组名（小号字距加宽） |
@@ -84,6 +84,14 @@
 | 可编辑表 | `table.edit` 包在 `.tbl-wrap` 里 | 参数表 |
 | 日志 | `.log > table` | 战报、日志，最新在上 |
 | 快捷键 | `<kbd>` 放在 `.kbd-hint` 里 | 操作提示 |
+
+### 原生控件已统一主题（直接写原生标签即可）
+- `<select>`：已去掉系统外观，直角细框、墨色折角箭头，悬停变 `--panel-2`。**不要**再用 `background` 简写去覆盖它（箭头已用 `!important` 保护）；只需按场景设宽度和内边距。
+- `<input type="range">`：细轨 + 算子式方形滑块；已拖过的一段着 `--side`（在阵营卡里自动是阵营色，其他地方是铜色）。比例由 `main.js` 的 `fillRange` 写入 `--fill`，新加的滑杆不用另外处理。
+- `<input type="checkbox">`：直角小方框，选中填铜色；放在 `.chk` 或 `.cp-chk` 里配文字。
+- `<input type="number">`：不显示上下箭头，靠键盘输入；文本框、多行文本统一直角。
+- 滚动条：细、`--rule` 色，自动生效。
+- 不要再写 `accent-color`、圆角或系统默认外观。
 
 ### 状态写法
 - 选中：`aria-pressed="true"`（按钮组）或 `aria-selected="true"`（页签）或 `.on`（列表项）。**不要**用自定义颜色类表示选中。
@@ -117,3 +125,10 @@
 | 编辑器 | 战术 | `v-tactics` | 战术库与克制 |
 | 编辑器 | 规则 | `v-rules` | 兵种、阵型、状态、地形、结算参数 |
 | 编辑器 | 批量推演 | `v-batch` | 按战斗编辑中的编成连续演算 |
+
+---
+
+## 6. 地图
+
+- 战役道路一律画成曲线：用 `camp_ui.js` 的 `roadD` / `roadSeg` / `roadAt`，同一条路的弯法由两端据点 id 决定，所以地图、行军路线、军团位置和编辑器预览完全重合。**不要**再用 `<line>` 或 `<polyline>` 画道路。
+- 道路分两层：`.cp-road-bed`（宽、淡的路基）在下，`.cp-road`（细墨线）在上；行军路线 `.cp-path` 用阵营色虚线加箭头。

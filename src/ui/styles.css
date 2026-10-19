@@ -479,3 +479,41 @@ button.pick.gone,button.pick[aria-disabled="true"]{opacity:.45;cursor:not-allowe
 .toolbar .sp{flex:1}
 .form-row input{width:100%;min-width:0;padding:3px 4px;border:1px solid var(--rule);background:var(--panel)}
 [hidden]{display:none!important}
+
+/* ===== v18.1 原生控件统一主题：下拉、滑杆、勾选、输入框、滚动条 ===== */
+/* 下拉：去掉系统外观，直角细框 + 墨色折角箭头（箭头用渐变画，随主题变色）。
+   用 !important 是因为各处旧规则用 background 简写会把箭头冲掉 */
+select{appearance:none;-webkit-appearance:none;border:1px solid var(--rule);border-radius:0;background-color:var(--panel);color:var(--ink);cursor:pointer;
+  padding-right:22px!important;
+  background-image:linear-gradient(45deg,transparent 50%,var(--ink-2) 50%),linear-gradient(135deg,var(--ink-2) 50%,transparent 50%)!important;
+  background-position:calc(100% - 12px) 52%,calc(100% - 7px) 52%!important;background-size:5px 5px,5px 5px!important;background-repeat:no-repeat!important}
+select:hover{background-color:var(--panel-2)}
+select:disabled{opacity:.5;cursor:not-allowed}
+select option,select optgroup{background:var(--panel);color:var(--ink)}
+select.btn{border-color:var(--ink)}
+/* 滑杆：细轨 + 算子式方形滑块；已拖过的一段用阵营色或铜色（--fill 由 main.js 写入） */
+input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;height:18px;margin:0;cursor:pointer;min-width:0}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border:1px solid var(--rule);
+  background:linear-gradient(var(--side,var(--brass)),var(--side,var(--brass))) 0 0/var(--fill,0%) 100% no-repeat,var(--panel-2)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:16px;margin-top:-6px;background:var(--side,var(--brass));border:1px solid var(--ink);border-radius:1px;box-shadow:var(--ctr-shadow)}
+input[type=range]::-moz-range-track{height:4px;border:1px solid var(--rule);background:var(--panel-2)}
+input[type=range]::-moz-range-progress{height:4px;background:var(--side,var(--brass))}
+input[type=range]::-moz-range-thumb{width:8px;height:14px;background:var(--side,var(--brass));border:1px solid var(--ink);border-radius:1px}
+input[type=range]:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+input[type=range]:disabled{opacity:.45;cursor:not-allowed}
+/* 勾选：直角小方框，选中填铜色 */
+input[type=checkbox]{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin:0;flex:none;border:1px solid var(--ink-2);background:var(--panel);border-radius:0;cursor:pointer;vertical-align:-2px;position:relative}
+input[type=checkbox]:checked{background:var(--brass);border-color:var(--brass);box-shadow:inset 0 0 0 2px var(--panel)}
+input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}
+/* 输入框：直角，数字不显示上下箭头 */
+input[type=number],input[type=text],input:not([type]),textarea{border-radius:0;color:var(--ink)}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input::placeholder,textarea::placeholder{color:var(--ink-2);opacity:.7}
+/* 滚动条：细、墨线色 */
+*{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+/* 战役道路：曲线，底下一道浅色路基，上面墨线 */
+#cp-svg .cp-road-bed{fill:none;stroke:var(--ink-2);stroke-width:8;opacity:.12;stroke-linecap:round}
+#cp-svg .cp-road{fill:none;stroke:var(--ink-2);stroke-width:2.5;opacity:.6;stroke-linecap:round;stroke-dasharray:none}
+#cp-svg .cp-path{stroke-linecap:round;stroke-linejoin:round}
+.ed-road{fill:none;stroke-linecap:round}

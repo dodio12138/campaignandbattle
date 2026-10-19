@@ -91,6 +91,20 @@ function renderCampInfo(){
     <div class="lbl" style="margin-top:6px">每日军粮消耗</div>${["A","B"].map(s=>`<div class="note">${c.sideName(s)}：${c.armies.filter(a=>a.side===s&&!a.gone).reduce((t,a)=>t+c.eat(a),0).toFixed(1)} / 日</div>`).join("")}
     <div class="lbl" style="margin-top:6px">胜负条件</div>${c.sc.victory.map(v=>`<div class="note">${c.sideName(v.side)}胜：${v.text}</div>`).join("")}`;
 }
+/* 道路曲线：每条路按两端据点 id 固定弯法（弧形或 S 形），地图、行军路线、军团棋子与编辑器共用 */
+function roadCurve(ia,a,ib,b){ const fw=ia<ib, p=fw?a:b, q=fw?b:a, key=fw?ia+"|"+ib:ib+"|"+ia;
+  let h=7; for(const ch of key) h=(h*31+ch.charCodeAt(0))>>>0;
+  const dx=q.x-p.x, dy=q.y-p.y, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L;
+  const k1=Math.min(46,L*(0.07+(h>>>4)%5*0.018))*(h&1?1:-1), k2=h&2?k1*0.55:-k1*0.75;   // 同向为弧，反向为 S
+  return {fw,p,q,c1:{x:p.x+dx/3+nx*k1,y:p.y+dy/3+ny*k1},c2:{x:p.x+dx*2/3+nx*k2,y:p.y+dy*2/3+ny*k2}}; }
+function bezAt(c,t){ const u=1-t, A=u*u*u, B=3*u*u*t, C=3*u*t*t, D=t*t*t;
+  return {x:A*c.p.x+B*c.c1.x+C*c.c2.x+D*c.q.x, y:A*c.p.y+B*c.c1.y+C*c.c2.y+D*c.q.y}; }
+const r1=v=>Math.round(v*10)/10;
+/* 从 a 走到 b 的一段 C 指令（不含起点 M） */
+function roadSeg(ia,a,ib,b){ const c=roadCurve(ia,a,ib,b), [c1,c2,e]=c.fw?[c.c1,c.c2,c.q]:[c.c2,c.c1,c.p]; return `C${r1(c1.x)} ${r1(c1.y)} ${r1(c2.x)} ${r1(c2.y)} ${r1(e.x)} ${r1(e.y)}`; }
+function roadD(ia,a,ib,b){ return `M${a.x} ${a.y} `+roadSeg(ia,a,ib,b); }
+/* 从 a 往 b 走了 t（0–1）时所在的点 */
+function roadAt(ia,a,ib,b,t){ const c=roadCurve(ia,a,ib,b); return bezAt(c,c.fw?t:1-t); }
 /* 地图 */
 function renderCampMap(){
   const c=camp, N=c.nodes; const svg=$("#cp-svg"); let h="";
@@ -100,10 +114,11 @@ function renderCampMap(){
 `;
   const mp=c.sc.map||(Object.values(CAMP_SCENARIOS).find(s=>s.name===c.sc.name)||{}).map||{};
   for(const r of mp.rivers||[]) h+=`<path d="${r.d}" fill="none" stroke="var(--river,#6f9bb8)" stroke-width="9" opacity=".55"/>${r.label?`<text x="${r.lx}" y="${r.ly}" class="cp-rl">${r.label}</text>`:""}`;
-  for(const e of c.edges){ const a=N[e.a], b=N[e.b]; h+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="cp-road"/><text x="${(a.x+b.x)/2}" y="${(a.y+b.y)/2-4}" class="cp-days">${e.d}</text>`; }
+  for(const e of c.edges){ const a=N[e.a], b=N[e.b], d=roadD(e.a,a,e.b,b), m=roadAt(e.a,a,e.b,b,0.5); h+=`<path d="${d}" class="cp-road-bed"/><path d="${d}" class="cp-road"/><text x="${r1(m.x)}" y="${r1(m.y-6)}" class="cp-days">${e.d}</text>`; }
   // 计划路线
   for(const a of c.armies){ if(a.gone||!a.path.length) continue; if(c.control[a.side]!=="player"&&a.side!==(campSel&&c.army(campSel)?c.army(campSel).side:"")&&c.control.A==="player"&&a.side==="B") continue;
-    const pts=[a.at,...a.path].map(x=>`${N[x].x},${N[x].y}`).join(" "); h+=`<polyline points="${pts}" class="cp-path ${a.side.toLowerCase()} ${a.id===campSel?"on":""}" marker-end="url(#cpar)"/>`; }
+    const st=[a.at,...a.path]; let d=`M${N[st[0]].x} ${N[st[0]].y}`; for(let i=1;i<st.length;i++) d+=" "+roadSeg(st[i-1],N[st[i-1]],st[i],N[st[i]]);
+    h+=`<path d="${d}" class="cp-path ${a.side.toLowerCase()} ${a.id===campSel?"on":""}" marker-end="url(#cpar)"/>`; }
   for(const n of Object.values(N)){ const own=n.owner?n.owner.toLowerCase():"n"; const sel=campPick?" pick":"";
     let shape=""; if(n.type==="city") shape=`<rect x="-15" y="-15" width="30" height="30" class="cp-node ${own}"/><rect x="-9" y="-9" width="18" height="18" class="cp-node-in ${own}"/>`;
     else if(n.type==="camp") shape=`<rect x="-14" y="-14" width="28" height="28" class="cp-node camp ${own}"/>`;
@@ -116,7 +131,7 @@ function renderCampMap(){
     h+=`<g class="cp-n${sel}" data-node="${n.id}" transform="translate(${n.x},${n.y})" tabindex="0" role="button" aria-label="${n.name}${n.cover==="林"?"（林木）":""}">${cov}${shape}${dep}<text y="${n.depot?40:30}" class="cp-name">${n.name}</text><text y="${n.depot?53:43}" class="cp-sub">${fortT}${n.depot?" 粮"+Math.round(n.depot.food):""}</text></g>`;
     if(c.pending.some(e=>e.node===n.id&&!e.done)) h+=`<text x="${n.x+18}" y="${n.y-16}" class="cp-x">⚔</text>`; }
   // 军团棋子
-  const stack={}; for(const a of c.armies){ if(a.gone) continue; let x,y; if(a.moving||(a.path.length&&a.prog>0)){ const nx=N[a.path[0]], fr=N[a.at], e=c.edge(a.at,a.path[0]); const f=Math.min(0.9,a.prog/e.d); x=fr.x+(nx.x-fr.x)*f; y=fr.y+(nx.y-fr.y)*f; } else { x=N[a.at].x; y=N[a.at].y; }
+  const stack={}; for(const a of c.armies){ if(a.gone) continue; let x,y; if(a.moving||(a.path.length&&a.prog>0)){ const nx=N[a.path[0]], fr=N[a.at], e=c.edge(a.at,a.path[0]); const f=Math.min(0.9,a.prog/e.d); ({x,y}=roadAt(a.at,fr,a.path[0],nx,f)); } else { x=N[a.at].x; y=N[a.at].y; }
     const key=Math.round(x)+","+Math.round(y); const k=stack[key]=(stack[key]||0)+1; const dy=-34-(k-1)*24, dx=a.side==="A"?-74:8;
     const cu=c.combatUnits(a).length;
     h+=`<g class="cp-army ${a.side.toLowerCase()} ${a.id===campSel?"on":""}" data-army="${a.id}" transform="translate(${x+dx},${y+dy+ (a.side==="A"?0:0)})" tabindex="0" role="button" aria-label="${a.name}"><rect width="66" height="21" rx="2"/><text x="5" y="14" class="cp-an">${a.gen.name}</text><text x="61" y="14" class="cp-ac">${cu}${a.cargo>0?"·粮":""}</text>${a.mission.type==="fire"?`<text x="33" y="-3" class="cp-tag">火攻</text>`:a.mission.type==="raid"?`<text x="33" y="-3" class="cp-tag">截粮</text>`:a.mission.type==="escort"?`<text x="33" y="-3" class="cp-tag">运粮</text>`:a.mission.type==="delay"?`<text x="33" y="-3" class="cp-tag">阻击</text>`:""}</g>`; }
@@ -249,7 +264,7 @@ const inp=(p,v,t="num",attr="")=>`<input ${t==="str"?'type="text"':'type="number
 const sel=(p,v,opts,attr="")=>`<select data-p="${p}" data-t="str" ${attr}>${opts.map(([k,l])=>`<option value="${esc(k)}" ${String(k)===String(v??"")?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
 function scPreviewSVG(sc){ const N=sc.nodes; let h=`<rect width="1000" height="800" class="ed-bg"/>`;
   for(const r of (sc.map&&sc.map.rivers)||[]) h+=`<path d="${esc(r.d)}" class="ed-river"/>`;
-  for(const [a,b,d] of sc.edges) if(N[a]&&N[b]) h+=`<line x1="${N[a].x}" y1="${N[a].y}" x2="${N[b].x}" y2="${N[b].y}" class="ed-road"/><text x="${(N[a].x+N[b].x)/2}" y="${(N[a].y+N[b].y)/2-6}" class="ed-d">${d}</text>`;
+  for(const [a,b,d] of sc.edges) if(N[a]&&N[b]){ const m=roadAt(a,N[a],b,N[b],0.5); h+=`<path d="${roadD(a,N[a],b,N[b])}" class="ed-road"/><text x="${r1(m.x)}" y="${r1(m.y-8)}" class="ed-d">${d}</text>`; }
   for(const [id,n] of Object.entries(N)) h+=`<g class="ed-n ${(n.owner||"n").toLowerCase()}" data-drag="${id}" transform="translate(${n.x},${n.y})"><circle r="${n.type==="road"||n.type==="ford"?12:18}"/>${n.cover==="林"?'<text y="-24" class="ed-cv">林</text>':""}<text y="38" class="ed-nm">${esc(n.name)}</text></g>`;
   for(const a of sc.armies){ const n=N[a.at]; if(!n) continue; } return h; }
 function buildCampSetup(){ const el=$("#camp-setup"); if(!el) return; const key=campCfg.scenario, sc=curSc(); if(!sc){ campCfg.scenario="GUANDU"; return buildCampSetup(); }

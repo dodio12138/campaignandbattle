@@ -47,6 +47,12 @@ for(const p of PRESETS) for(const k of ["A","B"]) if(!p[k].ai) p[k].ai={on:true,
 let spec=JSON.parse(JSON.stringify(PRESETS[2]));
 let battle=null, timer=null, logRows=[], selected=null;
 
+/* ---------- 滑杆已拖过的一段着色：把比例写入 --fill（样式见 styles.css「原生控件统一主题」） ---------- */
+const fillRange=r=>r.style.setProperty("--fill",((r.value-r.min)/((r.max-r.min)||1)*100)+"%");
+let fillPending=false; const fillAll=()=>{ if(fillPending) return; fillPending=true; requestAnimationFrame(()=>{ fillPending=false; document.querySelectorAll('input[type="range"]').forEach(fillRange); }); };
+document.addEventListener("input",e=>{ if(e.target.type==="range") fillRange(e.target); });
+new MutationObserver(fillAll).observe(document.body,{childList:true,subtree:true}); addEventListener("load",fillAll); document.addEventListener("click",fillAll); document.addEventListener("change",fillAll);
+
 /* ---------- 存取 ---------- */
 function loadSaved(){ try{ const s=JSON.parse(localStorage.getItem("hm-rules-v14")||"null"); if(s){ Object.assign(P,s.P||{}); for(const k in (s.UT||{})) if(UT[k]) Object.assign(UT[k],s.UT[k]); for(const k in (s.T||{})) if(TERRAIN[k]) Object.assign(TERRAIN[k],s.T[k]); for(const k in (s.F||{})) if(FORM[k]) Object.assign(FORM[k],s.F[k]); for(const k in (s.S||{})) if(STATUS[k]) Object.assign(STATUS[k],s.S[k]); } }catch(e){} }
 function saveRules(){ try{ localStorage.setItem("hm-rules-v14",JSON.stringify({P,UT,T:TERRAIN,F:FORM,S:STATUS})); }catch(e){} }
