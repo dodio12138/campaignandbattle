@@ -29,7 +29,7 @@ struct App {
   bool keys[6] = {false, false, false, false, false, false};
   double fps = 0; int frames = 0; double fpsT = 0; int winner = -1; bool ended = false;
   std::vector<double> stepHist;
-  std::string shotPath; int shotTicks = 0; double runSeconds = 0;   // --screenshot 路径 --ticks N：跑 N tick 后截图退出
+  std::string shotPath; int shotTicks = 0; double runSeconds = 0; int shotAfter = 0; float shotZoom = 0;   // --screenshot 路径 --ticks N：跑 N tick 后截图退出
 
   void load() {
     sim = std::make_unique<Sim>(seed, 0); sim->w.P.load("params.txt");
@@ -135,6 +135,28 @@ struct App {
     float ps = std::clamp(0.9f * cam.zoom, 1.5f * dpi, 14.f * dpi);
     if (!xy2.empty()) gfx.points(xy2.data(), c2.data(), (int)xy2.size() / 2, ps * 0.8f);
     gfx.points(xy.data(), rgba.data(), live, ps);
+    // 箭矢：发射后 1 秒内沿直线飞到落点（短线段表示箭身），命中者落点处闪一圈
+    {
+      const float flight = 1.0f, flash = 0.4f;
+      for (const Shot& sh : sim->shots) {
+        float age = (sim->w.tick - sh.tick) * sim->w.P.dt + (float)alpha * sim->w.P.dt;
+        uint32_t c = sh.side == 0 ? RGBA(120, 30, 30, 200) : RGBA(30, 50, 120, 200);
+        if (age < flight) {
+          float dist = hypotf(sh.x1 - sh.x0, sh.y1 - sh.y0); float t1 = age / flight, t0 = std::max(0.f, t1 - std::min(0.12f, 4.f / std::max(dist, 1.f)));
+          // 抛物线：中途抬高一点，让齐射看得出弧线
+          float h = 4.f * t1 * (1.f - t1) * 0.08f * hypotf(sh.x1 - sh.x0, sh.y1 - sh.y0);
+          float h0 = 4.f * t0 * (1.f - t0) * 0.08f * hypotf(sh.x1 - sh.x0, sh.y1 - sh.y0);
+          float ax0, ay0, ax1, ay1; cam.toScreen(sh.x0 + (sh.x1 - sh.x0) * t0, sh.y0 + (sh.y1 - sh.y0) * t0 + h0, ax0, ay0); cam.toScreen(sh.x0 + (sh.x1 - sh.x0) * t1, sh.y0 + (sh.y1 - sh.y0) * t1 + h, ax1, ay1);
+          if (ax1 < -20 || ay1 < -20 || ax1 > dw + 20 || ay1 > dh + 20) continue;
+          gfx.line(ax0, ay0, ax1, ay1, std::max(1.f, 0.35f * cam.zoom), c);
+        } else if (sh.hit && age < flight + flash) {
+          float k = (age - flight) / flash; float sx, sy; cam.toScreen(sh.x1, sh.y1, sx, sy);
+          if (sx < -20 || sy < -20 || sx > dw + 20 || sy > dh + 20) continue;
+          gfx.circle(sx, sy, (1.2f + 3.f * k) * std::max(1.2f, 0.8f * cam.zoom), std::max(1.5f, 0.5f * cam.zoom), RGBA(235, 140, 20, (int)(255 * (1.f - k * 0.8f))), 12);
+        }
+      }
+      gfx.flush();
+    }
     // 曲：旗、朝向、选中圈、名字
     for (auto& u : sim->w.units) {
       if (u.alive + u.routed == 0) continue;
@@ -196,7 +218,7 @@ struct App {
   }
 
   int run(int argc, char** argv) {
-    for (int i = 1; i < argc; i++) { std::string a = argv[i]; if (a == "--seed" && i + 1 < argc) seed = atoi(argv[++i]); else if (a == "--screenshot" && i + 1 < argc) shotPath = argv[++i]; else if (a == "--ticks" && i + 1 < argc) shotTicks = atoi(argv[++i]); else if (a == "--run-seconds" && i + 1 < argc) runSeconds = atof(argv[++i]); else if (a == "--side" && i + 1 < argc) player = atoi(argv[++i]); else for (size_t k = 0; k < scenarios().size(); k++) if (scenarios()[k].id == a) scenarioIdx = (int)k; }
+    for (int i = 1; i < argc; i++) { std::string a = argv[i]; if (a == "--seed" && i + 1 < argc) seed = atoi(argv[++i]); else if (a == "--screenshot" && i + 1 < argc) shotPath = argv[++i]; else if (a == "--ticks" && i + 1 < argc) shotTicks = atoi(argv[++i]); else if (a == "--run-seconds" && i + 1 < argc) runSeconds = atof(argv[++i]); else if (a == "--after" && i + 1 < argc) shotAfter = atoi(argv[++i]); else if (a == "--zoom" && i + 1 < argc) shotZoom = (float)atof(argv[++i]); else if (a == "--side" && i + 1 < argc) player = atoi(argv[++i]); else for (size_t k = 0; k < scenarios().size(); k++) if (scenarios()[k].id == a) scenarioIdx = (int)k; }
     if (SDL_Init(SDL_INIT_VIDEO) != 0) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 1; }
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3); SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE); SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -210,6 +232,10 @@ struct App {
       SDL_GL_SetSwapInterval(0);
       for (int k = 0; k < 20; k++) { SDL_Event e; while (SDL_PollEvent(&e)) {} SDL_Delay(10); }
       for (int t = 0; t < shotTicks; t++) tick();
+      for (int t = 0; t < 1200; t++) { bool recent = false; for (const Shot& sh : sim->shots) if (sim->w.tick - sh.tick <= 5) { recent = true; break; } if (recent) break; tick(); }
+      if (!sim->shots.empty()) { double sx = 0, sy = 0; float wgt = shotAfter >= 10 ? 1.f : 0.5f; for (const Shot& sh : sim->shots) { sx += sh.x0 + (sh.x1 - sh.x0) * wgt; sy += sh.y0 + (sh.y1 - sh.y0) * wgt; } cam.cx = (float)(sx / sim->shots.size()); cam.cy = (float)(sy / sim->shots.size()); }
+      if (shotZoom > 0) cam.zoom = shotZoom * dpi;
+      for (int t = 0; t < shotAfter; t++) tick();
       sel.insert(sim->w.units[0].id); sel.insert(sim->w.units[1].id);
       glReadBuffer(GL_BACK);
       draw(1.0, false);

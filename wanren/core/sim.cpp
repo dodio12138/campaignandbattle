@@ -291,6 +291,7 @@ void Sim::resolveAttacks() {
 
 void Sim::volleys() {
   const Params& P = w.P; auto& s = w.s;
+  if (!shots.empty() && w.tick - shots.front().tick > 20) { size_t k = 0; while (k < shots.size() && w.tick - shots[k].tick > 20) k++; shots.erase(shots.begin(), shots.begin() + k); }
   for (auto& u : w.units) {
     if (!kindIsMissile(u.kind) || u.alive == 0 || u.stance == ST_PRONE) continue;
     u.reload -= P.dt;
@@ -310,13 +311,14 @@ void Sim::volleys() {
     if (dist < P.missileMinRange) { u.reload = 1.f; continue; }
     float rangeMul = dist <= range ? 1.f : std::max(0.f, (maxR - dist) / (maxR - range));
     float sigma = dist * P.volleySpread + 2.f;
-    int shots = 0, hits = 0;
+    int shotN = 0, hits = 0;
     for (int id : u.members) {
       if (s.state[id] != S_FORMED) continue;
-      shots++;
+      shotN++;
       float ax = T.cx + w.rng.gauss() * sigma, ay = T.cy + w.rng.gauss() * sigma;
       int best = -1; float bd = 2.25f;
       grid.forNear(ax, ay, 1.5f, [&](int j) { if (s.side[j] == u.side) return; float dx = s.x[j] - ax, dy = s.y[j] - ay, d2 = dx * dx + dy * dy; if (d2 < bd) { bd = d2; best = j; } });
+      shots.push_back({s.x[id], s.y[id], ax, ay, w.tick, u.side, false});
       if (best < 0) continue;
       float p = hitP * rangeMul;
       const Unit& tu = w.units[s.unit[best]];
@@ -327,11 +329,11 @@ void Sim::volleys() {
       float red = P.armorArrow[s.armor[best]]; if (u.kind == K_HXBOW) red *= P.hxbowArmorBreak;
       if (s.flags[best] & 32) red = std::max(red, P.horseArmorArrow);
       s.hp[best] += dmg * (1.f - red);
-      hits++;
+      hits++; shots.back().hit = true; shots.back().x1 = s.x[best]; shots.back().y1 = s.y[best];
       if (s.hp[best] >= P.hp) applyDown(best, u.members[0], true);
     }
     u.reload = reloadT * w.rng.range(0.9f, 1.1f);
-    if (shots >= 200 && hits * 10 >= shots) log(u.name + "齐射，所中必倒");
+    if (shotN >= 200 && hits * 10 >= shotN) log(u.name + "齐射，所中必倒");
   }
 }
 

@@ -6,6 +6,7 @@
 #include <memory>
 
 struct Attack { int32_t a, t; uint8_t type; bool impact; };   // type: 0 刺 1 砍
+struct Shot { float x0, y0, x1, y1; int tick; uint8_t side; bool hit; };   // 一支箭：起点、落点、发射 tick、是否命中（供画面用）
 
 struct Sim {
   World w; Grid grid; std::unique_ptr<Pool> pool;
@@ -13,6 +14,7 @@ struct Sim {
   std::vector<uint8_t> engaged;              // 本 tick 接敌
   std::vector<std::vector<Attack>> attacks;  // 每线程
   std::vector<float> unitFatigue;
+  std::vector<Shot> shots;                   // 最近 2 秒内的箭矢（画面用；bench 也保留，开销很小）
   // 统计
   int kills[2] = {0, 0};
   double lastStepMs = 0;
