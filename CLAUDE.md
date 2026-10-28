@@ -62,3 +62,11 @@
 - 之前讨论过、可以继续加的战术和规则：诱敌、伏兵、水战、渡河半济而击、坚壁清野、离间、劝降，以及更多战役（赤壁、合肥、汉中等）。
 - 夷陵的平衡等用户反馈再调。
 - 本仓库还没有初始化 git，可以先 `git init`，做一次「v17 项目化」的首次提交。
+
+## 子项目 wanren/（万人阵，v0.1，2026-10-28 起）
+- 用户新开的坑：**单兵级实时战场**，每名士卒一个点，以曲（200 人）为单位指挥。用户明确要求**性能最优、纯原生 C++、不做网页**（先后否决了 TS/Vite 和 C++→WASM 方案）。
+- 技术栈：C++20 + SDL2 + OpenGL 3.3，中文用 macOS 自带 CoreText（`app/text_mac.mm`，brew 装 sdl2_ttf 会去源码编 python，别装），CMake。brew 的 sdl2 实为 SDL3 兼容层，无窗口时 `SDL_GL_SwapWindow` 会卡死，截图模式已绕开。只许依赖这几样，不引第三方源码（环境禁止拉外部代码，`git clone`、`rm -rf` 都会被拦）。
+- 工作流：改 `wanren/core` 或 `wanren/app` → `cd wanren && npm run build`（= cmake）→ `./build/wanren_test` → `./build/wanren_bench jieqiao 12000 0 <种子>`，在回复里报 ms/tick 与战果。
+- 考据与模型全在 `wanren/docs/DESIGN.md`；凡「待核」的数字都是推定值，做成了 `core/params.hpp` 里的参数（可用 `params.txt` 覆盖）。
+- 平衡基线（v0.1，AI 对 AI，`wanren_bench jieqiao 12000 0 <种子>`）：界桥 种子 1–5 袁绍 4 胜 1 负，5–7 分钟定胜负，阵亡各约 1–2%，败方溃散过半、主将走。性能：平野 1.94 万人 16 线程 1.9 ms/tick、单线程 5.1 ms/tick。
+- 已知待做：地形（高差、林、河）、多曲协同（部级换阵）、战役层对接、网格与士气阶段的并行优化。

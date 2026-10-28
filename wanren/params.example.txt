@@ -1,0 +1,5 @@
+# 万人阵参数覆盖示例：复制为 params.txt 生效。键名与默认值见 core/params.hpp
+# skillBase = 0.12        # 每次近战攻击基础命中率
+# hxbowRange = 150        # 蹶张强弩有效射程（米）
+# cavBalkCohesion = 0.6   # 骑兵面对凝聚高于此的长兵阵会勒马
+# moraleThreshold = 25    # 一般士卒溃走阈值

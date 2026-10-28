@@ -1,0 +1,12 @@
+{
+  "name": "wanren",
+  "version": "0.1.0",
+  "description": "万人阵：汉末三国单兵级实时战场模拟（原生 C++，每名士卒一个点，方阵指挥）",
+  "private": true,
+  "scripts": {
+    "build": "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j",
+    "test": "npm run build && ./build/wanren_test",
+    "bench": "npm run build && ./build/wanren_bench",
+    "start": "npm run build && ./build/wanren"
+  }
+}
