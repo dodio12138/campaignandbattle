@@ -87,6 +87,83 @@ int main() {
     CHECK(A.dead + B.dead > 100, "有实质伤亡");
     CHECK(A.dead < 0.4f * A.total && B.dead < 0.4f * B.total, "阵亡不超过四成（合史）");
   }
+  // 6. 行进：横向行进 100 m 时全程凝聚不散；平移保持朝向；到达后按指定方向站定
+  {
+    Sim sim(2, 1); Params P;
+    UnitSpec sp{"曲", K_HALBERD, 200}; sp.files = 20;
+    int a = addUnit(sim, 0, sp, 500, 500, 0, 1, 0); int b = addUnit(sim, 0, sp, 800, 500, 0, 1, 0); sim.finalize();
+    sim.issue(a, {O_MOVE, 600, 500}, true);                       // 向右 100 m（与朝向垂直）：轮转后行进
+    Order o{O_MOVE, 830, 500, 1}; sim.issue(b, o, true);           // 平移 30 m：保持朝向
+    float minCoh = 1.f; int arrivedA = -1;
+    for (int t = 0; t < 1500; t++) { sim.step(); const Unit& U = sim.w.units[a]; minCoh = std::min(minCoh, U.cohesion); if (arrivedA < 0 && U.stance == ST_HOLD && t > 5) arrivedA = t; }
+    const Unit& A = sim.w.units[a]; const Unit& B = sim.w.units[b];
+    printf("   横向行进：最低凝聚 %.2f，到达 tick %d，朝向 (%.2f,%.2f)；平移后朝向 (%.2f,%.2f) 中心 x=%.1f\n", minCoh, arrivedA, A.fx, A.fy, B.fx, B.fy, B.cx);
+    CHECK(minCoh > 0.6f, "横向行进全程凝聚不低于 60%");
+    CHECK(arrivedA > 0 && fabsf(A.cx - 600) < 2.f, "横向行进在 150 s 内到达");
+    CHECK(A.fx > 0.9f, "行进后面向行进方向");
+    CHECK(fabsf(B.fy - 1.f) < 1e-3f && fabsf(B.cx - 830) < 2.f, "平移保持原朝向且到达");
+    Order o2{O_MOVE, 600, 450}; o2.fx = 0; o2.fy = -1; sim.issue(a, o2, true);   // 走到点后面向南
+    for (int t = 0; t < 1500; t++) sim.step();
+    CHECK(sim.w.units[a].fy < -0.95f && sim.w.units[a].stance == ST_HOLD, "到达后转向指定方向并站定");
+  }
+  // 7. 突骑反复冲击：3 分钟内至少冲 2 轮，每轮接战不超过设定秒数；骑兵不会耗死在人堆里
+  {
+    Sim sim(4, 1);
+    UnitSpec inf{"刀盾", K_SWORD, 600}; inf.files = 60; inf.armorPct[0] = 60; inf.armorPct[1] = 30; inf.armorPct[2] = 10;
+    UnitSpec cav{"突骑", K_CAV, 300}; cav.files = 30; cav.elite = true;
+    int a = addUnit(sim, 0, inf, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, cav, 500, 700, 0, -1, 0); sim.finalize();
+    sim.issue(b, {O_CHARGE, 500, 500, a}, true);
+    int maxMelee = 0, meleeRun = 0, cycles = 0; uint8_t last = CP_NONE; int disengages = 0;
+    for (int t = 0; t < 1800; t++) {
+      sim.step(); const Unit& C = sim.w.units[b];
+      if (C.cavPhase == CP_MELEE) { meleeRun++; maxMelee = std::max(maxMelee, meleeRun); } else meleeRun = 0;
+      if (C.cavPhase == CP_DISENGAGE && last != CP_DISENGAGE) disengages++;
+      last = C.cavPhase; cycles = C.cycles;
+    }
+    const Unit& I = sim.w.units[a]; const Unit& C = sim.w.units[b];
+    printf("   突骑对刀盾 3 分钟：冲击 %d 轮，脱离 %d 次，最长连续接战 %.1f s；刀盾 亡伤 %d/%d 溃 %d；骑 亡伤 %d/%d 溃 %d 疲 %.0f\n", cycles, disengages, maxMelee * 0.1, I.dead, I.wounded, I.routed, C.dead, C.wounded, C.routed, sim.unitFatigue[b]);
+    CHECK(cycles >= 2 && disengages >= 2, "突骑至少冲击两轮并脱离");
+    CHECK(maxMelee * 0.1 <= sim.w.P.cavMeleeSeconds + 1.5, "每轮接战不超过设定秒数");
+    CHECK(C.dead + C.wounded < 100, "骑兵没有耗死在人堆里");
+  }
+  // 8. 骑射游射：2 分钟内始终在敌 20 m 以外、持续移动、有杀伤、自身几乎无损
+  {
+    Sim sim(6, 1);
+    UnitSpec inf{"戟", K_HALBERD, 600}; inf.files = 60;
+    UnitSpec ha{"弓骑", K_CAV_BOW, 300}; ha.files = 30; ha.formation = F_LOOSE;
+    int a = addUnit(sim, 0, inf, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, ha, 500, 700, 0, -1, 0); sim.finalize();
+    sim.issue(b, {O_FIRE, 0, 0, a}, true);
+    float minD = 1e9f; double movingTicks = 0; int sweeps = 0;
+    for (int t = 0; t < 1200; t++) {
+      sim.step(); const Unit& H = sim.w.units[b];
+      float d = 1e9f; for (int id : H.members) if (sim.w.s.state[id] < S_WOUNDED) for (int jd : sim.w.units[a].members) { if (sim.w.s.state[jd] >= S_WOUNDED) continue; float dd = hypotf(sim.w.s.x[id] - sim.w.s.x[jd], sim.w.s.y[id] - sim.w.s.y[jd]); if (dd < d) d = dd; }
+      if (t > 100) minD = std::min(minD, d);
+      if (t > 100 && H.stance != ST_HOLD) movingTicks++;
+      sweeps = H.cycles;
+    }
+    const Unit& I = sim.w.units[a]; const Unit& H = sim.w.units[b];
+    printf("   弓骑游射 2 分钟：最近距离 %.0f m，移动占比 %.0f%%，折返 %d 次；戟兵 亡伤 %d/%d；弓骑 亡伤 %d/%d\n", minD, movingTicks / 11.0, sweeps, I.dead, I.wounded, H.dead, H.wounded);
+    CHECK(minD > 15.f, "弓骑与敌保持距离");
+    CHECK(movingTicks / 11.0 > 80, "弓骑持续运动");
+    CHECK(sweeps >= 2, "至少折返两次");
+    CHECK(I.dead + I.wounded > 10 && H.dead + H.wounded < 5, "游射有杀伤且自身几乎无损");
+  }
+  // 9. 阵形效果：横列比方阵射得多；疏阵比数阵少吃箭
+  {
+    auto hurtAfter = [](uint8_t shooterForm, uint8_t targetForm, int shooterFiles) {
+      Sim sim(8, 1);
+      UnitSpec xb{"弩", K_XBOW, 600}; xb.formation = shooterForm; xb.files = shooterFiles;
+      UnitSpec inf{"戟", K_HALBERD, 600}; inf.formation = targetForm; inf.files = 30;
+      int a = addUnit(sim, 0, xb, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, inf, 500, 600, 0, -1, 0); sim.finalize();
+      for (int t = 0; t < 900; t++) sim.step();
+      return sim.w.units[b].dead + sim.w.units[b].wounded;
+    };
+    int line = hurtAfter(F_LINE, F_SQUARE, 200), square = hurtAfter(F_SQUARE, F_SQUARE, 30);
+    int dense = hurtAfter(F_LINE, F_DENSE, 200), loose = hurtAfter(F_LINE, F_LOOSE, 200);
+    printf("   弩 600 张 90 s：横列射方阵 伤 %d，方阵射方阵 伤 %d；横列射数阵 %d，射疏阵 %d\n", line, square, dense, loose);
+    CHECK(line > square * 1.5, "横列全员可射，远多于深方阵");
+    CHECK(dense > loose * 1.5, "数阵比疏阵吃箭多");
+  }
   printf(fails ? "\n%d 项失败\n" : "\n全部通过\n", fails);
   return fails ? 1 : 0;
 }

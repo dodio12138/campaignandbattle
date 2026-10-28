@@ -15,5 +15,5 @@ struct ScenarioDef { std::string id, title, note; std::vector<UnitSpec> armies[2
 
 const std::vector<ScenarioDef>& scenarios();
 // 把剧本装进 sim（两军相向，相距 dist 米）
-void loadScenario(Sim& sim, const ScenarioDef& sc, float dist = 600.f);
+void loadScenario(Sim& sim, const ScenarioDef& sc, float dist = 600.f, float scale = 1.f);   // scale：每曲人数倍率（压力测试用）
 int addUnit(Sim& sim, int side, const UnitSpec& sp, float cx, float cy, float fx, float fy, int part);

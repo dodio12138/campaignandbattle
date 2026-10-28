@@ -54,4 +54,7 @@ void buildSlots(Unit& u, const Params& P) {
   // 重心归零（中心 = 槽位平均）
   double sx = 0, sy = 0; for (int i = 0; i < n; i++) { sx += u.slotX[i]; sy += u.slotY[i]; }
   if (n) { sx /= n; sy /= n; for (int i = 0; i < n; i++) { u.slotX[i] -= (float)sx; u.slotY[i] -= (float)sy; } }
+  float hx = 2.f, hy = 2.f; for (int i = 0; i < n; i++) { hx = std::max(hx, fabsf(u.slotX[i])); hy = std::max(hy, fabsf(u.slotY[i])); }
+  u.hx = hx; u.hy = hy; u.halfWidth = std::max(4.f, std::max(hx, hy));
+  float fy = -1e9f; for (int i = 0; i < n; i++) fy = std::max(fy, u.slotY[i]); u.frontY = fy;
 }

@@ -30,15 +30,16 @@ void aiStep(Sim& sim, int side) {
       continue;
     }
     if (u.kind == K_CAV_BOW) {
-      // 弓骑：在 60 m 外游走射击
-      if (d < 45.f) sim.issue(u.id, {O_RETREAT, u.cx + (u.cx - E.cx) / d * 40.f, u.cy + (u.cy - E.cy) / d * 40.f});
-      else if (d > 75.f) sim.issue(u.id, {O_MOVE, E.cx + (u.cx - E.cx) / d * 60.f, E.cy + (u.cy - E.cy) / d * 60.f});
+      // 弓骑：游射循环由 cavalryBrain 执行，这里只在空闲时指定目标（优先远程 / 松动的敌曲）
+      if (u.cavPhase != CP_NONE) continue;
+      int best = -1; float bs = -1e9f;
+      for (auto& v : w.units) { if (v.side == side || v.alive < 5 || v.stance == ST_PRONE) continue; float dd = hypotf(v.cx - u.cx, v.cy - u.cy); float score = -dd * 0.1f + (kindIsMissile(v.kind) ? 20.f : 0.f) + (v.cohesion < 0.5f ? 15.f : 0.f) - (kindIsCav(v.kind) ? 25.f : 0.f); if (score > bs) { bs = score; best = v.id; } }
+      if (best >= 0) sim.issue(u.id, {O_FIRE, 0, 0, best});
       continue;
     }
     if (kindIsCav(u.kind)) {
-      // 勒马徘徊过多：撤回整队
-      if (u.balkTicks > 30) { sim.issue(u.id, {O_RETREAT, u.cx - adx * 150.f, u.cy - ady * 150.f}); u.balkTicks = 0; continue; }
-      // 突骑：找松动 / 侧背暴露 / 远程 / 溃的敌曲
+      // 突骑：冲击循环由 cavalryBrain 执行；空闲时选目标（松动 / 侧背暴露 / 远程 / 溃的敌曲），否则绕到侧翼待机
+      if (u.cavPhase != CP_NONE) continue;
       int best = -1; float bs = -1e9f;
       for (auto& v : w.units) {
         if (v.side == side || v.alive < 5 || v.stance == ST_PRONE) continue;
@@ -49,13 +50,12 @@ void aiStep(Sim& sim, int side) {
         if (v.cohesion < 0.5f) score += 30;
         if (kindIsMissile(v.kind)) score += 25;
         if (cosA > 0.3f) score += 35; else if (cosA > -0.3f) score += 15;
-        if (kindIsLong(v.kind) && v.cohesion > P.cavBalkCohesion && cosA < -0.3f) score -= 60;
+        if (kindIsLong(v.kind) && v.cohesion > P.form[v.formation].balkCoh && cosA < -0.3f) score -= 60;
         score -= dd * 0.08f;
         if (score > bs) { bs = score; best = v.id; }
       }
-      if (best >= 0 && bs > 10.f) { const Unit& V = w.units[best]; if (u.stance != ST_CHARGE || hypotf(u.gx - V.cx, u.gy - V.cy) > 15.f) sim.issue(u.id, {O_CHARGE, V.cx, V.cy}); }
+      if (best >= 0 && bs > 10.f) { const Unit& V = w.units[best]; sim.issue(u.id, {O_CHARGE, V.cx, V.cy, best}); }
       else if (u.stance == ST_HOLD) {
-        // 绕到侧翼待机
         float side_ = (u.id % 2 == 0) ? 1.f : -1.f;
         float tx = ecx + rx * side_ * 180.f - adx * 120.f, ty = ecy + ry * side_ * 180.f - ady * 120.f;
         if (hypotf(tx - u.cx, ty - u.cy) > 30.f) sim.issue(u.id, {O_MOVE, tx, ty});

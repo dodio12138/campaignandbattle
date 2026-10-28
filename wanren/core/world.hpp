@@ -22,11 +22,15 @@ inline const char* formationName(uint8_t f) {
   static const char* n[] = {"方阵", "数阵", "疏阵", "圆阵", "锥形", "雁行", "横列", "纵队"};
   return f < F_COUNT ? n[f] : "?";
 }
-enum Stance : uint8_t { ST_HOLD, ST_MOVE, ST_CHARGE, ST_RETREAT, ST_PRONE };  // 伏盾 = ST_PRONE
+enum Stance : uint8_t { ST_HOLD, ST_MOVE, ST_CHARGE, ST_RETREAT, ST_PRONE, ST_TURN, ST_DISENGAGE };  // 伏盾 = ST_PRONE；ST_TURN = 原地轮转；ST_DISENGAGE = 骑兵脱离（不接战，疾驰回整队点）
+enum CavPhase : uint8_t { CP_NONE, CP_CHARGE, CP_MELEE, CP_DISENGAGE, CP_REFORM, CP_PURSUE, CP_SWEEP, CP_SWING };
+inline const char* cavPhaseName(uint8_t p) { static const char* n[] = {"", "冲击", "接战", "脱离", "整队", "追击", "游射", "回旋"}; return p < 8 ? n[p] : ""; }
 enum OrderType : uint8_t { O_MOVE, O_HALT, O_CHARGE, O_RETREAT, O_FIRE, O_FORMATION, O_FACE, O_PRONE, O_RISE };
 
 struct Order {
-  OrderType type; float x = 0, y = 0; int arg = -1; int execTick = 0;
+  OrderType type; float x = 0, y = 0; int arg = -1;   // O_MOVE: arg 0 行进（朝向随行进方向）/ 1 平移（保持朝向横走、倒走）
+  float fx = 0, fy = 0;                                // O_MOVE: 到达后转向此方向（0,0 = 不转）
+  int execTick = 0;
 };
 
 struct Unit {
@@ -36,6 +40,14 @@ struct Unit {
   uint8_t formation = F_SQUARE; int files = 20;
   float cx = 0, cy = 0, fx = 0, fy = 1;             // 中心、朝向（单位向量）
   float gx = 0, gy = 0;                             // 目标点
+  float tfx = 0, tfy = 1;                           // 目标朝向（ST_TURN 用；行进到达后若 faceOnArrive 则转向它）
+  bool faceOnArrive = false; bool sidestep = false; // 平移：不转向
+  bool freeMove = false;                            // 骑兵自由机动（游射）：面向目标、任意方向全速，不轮转
+  float halfWidth = 10.f;                           // 阵形半宽（轮转角速度 = 步速 / 半宽）
+  float hx = 10.f, hy = 7.f;                        // 横向 / 纵向半长；thin = 薄横列（纵深 < 6 m），别的曲可穿过它
+  float frontY = 0.f;                               // 前排槽位的 y（算排数用）
+  uint8_t cavPhase = CP_NONE; float cavTimer = 0;   // 骑兵用法状态机
+  int cavTarget = -1; float rallyX = 0, rallyY = 0; int sweepSign = 1; int cycles = 0;
   uint8_t stance = ST_HOLD;
   int fireTarget = -1;                              // 射击目标曲
   float reload = 0;                                 // 齐射计时（秒）

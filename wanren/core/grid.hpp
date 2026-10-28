@@ -1,50 +1,58 @@
-// 均匀网格 + 计数排序：每 tick 重建；同格士卒在 order 数组里连续
+// 均匀网格 + 计数排序：每 tick 按活人包围盒重建（格数只随战场实际范围走，不随世界大小走）
+// 排序时顺便把邻居扫描要的热数据打包成 16 字节连续数组（Packed），按格顺序排列
 #pragma once
 #include <vector>
 #include <cstdint>
+#include <algorithm>
 #include "world.hpp"
+#include "pool.hpp"
+
+struct Packed { float x, y; int32_t idx; uint16_t unit; uint8_t side, state; };
 
 struct Grid {
-  float cell = 4.f, invCell = 0.25f; int w = 0, h = 0;
+  float cell = 4.f, invCell = 0.25f; float ox = 0, oy = 0; int w = 1, h = 1;
   std::vector<int32_t> cellStart;   // 大小 w*h+1
   std::vector<int32_t> order;       // 按格排序的士卒下标
+  std::vector<Packed> packed;       // 与 order 同序
   std::vector<int32_t> cellOf;      // 每个士卒所在格（-1 = 不在网格）
   std::vector<int32_t> counts;
-  // 事件计数（士气传播用）：每格每方的阵亡 / 逃走数
-  std::vector<uint16_t> deaths[2], routs[2];
+  std::vector<uint16_t> deaths[2], routs[2];   // 每格每方的阵亡 / 逃走事件数（士气传播用）
 
-  void init(const Params& P) {
-    cell = P.cellSize; invCell = 1.f / cell;
-    w = (int)(P.worldW * invCell) + 1; h = (int)(P.worldH * invCell) + 1;
-    cellStart.assign(w * h + 1, 0); counts.assign(w * h, 0);
-    for (int sd = 0; sd < 2; sd++) { deaths[sd].assign(w * h, 0); routs[sd].assign(w * h, 0); }
-  }
-  inline int cx(float x) const { int c = (int)(x * invCell); return c < 0 ? 0 : (c >= w ? w - 1 : c); }
-  inline int cy(float y) const { int c = (int)(y * invCell); return c < 0 ? 0 : (c >= h ? h - 1 : c); }
+  void init(const Params& P) { cell = P.cellSize; invCell = 1.f / cell; }
+  inline int cx(float x) const { int c = (int)((x - ox) * invCell); return c < 0 ? 0 : (c >= w ? w - 1 : c); }
+  inline int cy(float y) const { int c = (int)((y - oy) * invCell); return c < 0 ? 0 : (c >= h ? h - 1 : c); }
   inline int idx(float x, float y) const { return cy(y) * w + cx(x); }
 
-  void build(const Soldiers& s) {
-    size_t n = s.size();
-    cellOf.resize(n);
-    std::fill(counts.begin(), counts.end(), 0);
+  // bbox：活人的包围盒（外扩一格）。串行计数排序：两遍扫描 + 一次前缀和；试过原子并行版，前缀和与原子开销抵消了收益
+  void build(const Soldiers& s, float minx, float miny, float maxx, float maxy, Pool* = nullptr) {
+    ox = minx - cell; oy = miny - cell;
+    w = std::max(1, (int)((maxx - ox) * invCell) + 2); h = std::max(1, (int)((maxy - oy) * invCell) + 2);
+    size_t n = s.size(); int nc = w * h;
+    cellOf.resize(n); counts.assign(nc, 0); cellStart.resize(nc + 1);
     for (size_t i = 0; i < n; i++) {
       if (s.state[i] >= S_WOUNDED) { cellOf[i] = -1; continue; }
       int c = idx(s.x[i], s.y[i]); cellOf[i] = c; counts[c]++;
     }
     int acc = 0;
-    for (int c = 0; c < w * h; c++) { cellStart[c] = acc; acc += counts[c]; }
-    cellStart[w * h] = acc;
-    order.resize(acc);
-    std::fill(counts.begin(), counts.end(), 0);
-    for (size_t i = 0; i < n; i++) { int c = cellOf[i]; if (c < 0) continue; order[cellStart[c] + counts[c]++] = (int32_t)i; }
+    for (int c = 0; c < nc; c++) { cellStart[c] = acc; acc += counts[c]; counts[c] = 0; }
+    cellStart[nc] = acc;
+    order.resize(acc); packed.resize(acc);
+    for (size_t i = 0; i < n; i++) {
+      int c = cellOf[i]; if (c < 0) continue;
+      int k = cellStart[c] + counts[c]++;
+      order[k] = (int32_t)i;
+      packed[k] = {s.x[i], s.y[i], (int32_t)i, (uint16_t)s.unit[i], s.side[i], s.state[i]};
+    }
+    for (int sd = 0; sd < 2; sd++) { if ((int)deaths[sd].size() != nc) { deaths[sd].assign(nc, 0); routs[sd].assign(nc, 0); } }   // 平时由 clearEvents 清零
   }
   void clearEvents() { for (int sd = 0; sd < 2; sd++) { std::fill(deaths[sd].begin(), deaths[sd].end(), 0); std::fill(routs[sd].begin(), routs[sd].end(), 0); } }
 
-  // 遍历 (x,y) 周围 r 米内的格子中的士卒
+  // 遍历 (x,y) 周围 r 米内各格里的士卒（打包数据）
   template <class F> inline void forNear(float x, float y, float r, F&& f) const {
     int x0 = cx(x - r), x1 = cx(x + r), y0 = cy(y - r), y1 = cy(y + r);
-    for (int yy = y0; yy <= y1; yy++) for (int xx = x0; xx <= x1; xx++) {
-      int c = yy * w + xx; for (int k = cellStart[c]; k < cellStart[c + 1]; k++) f(order[k]);
+    for (int yy = y0; yy <= y1; yy++) {
+      int kb = cellStart[yy * w + x0], ke = cellStart[yy * w + x1 + 1];   // 同一行的连续格在 packed 里连续
+      for (int k = kb; k < ke; k++) f(packed[k]);
     }
   }
   inline int sumEvents(const std::vector<uint16_t>& ev, float x, float y, float r) const {

@@ -88,6 +88,32 @@ struct Params {
   float contagionIdle = 0.5f;    // 未接敌的曲受溃散传染的折扣
   float contagionCohesion = 0.4f;// 凝聚每 1.0 减传染 40%
 
+  // —— 骑兵用法（无镫：反复冲击，不恋战；骑射游射） ——
+  float cavMeleeSeconds = 6.f;     // 冲击后在接战中停留的最长秒数，之后脱离
+  float cavDisengageDist = 80.f;   // 脱离后退到多远整队
+  float cavReformCohesion = 0.7f;  // 整队到此凝聚再冲
+  float cavReformMaxSeconds = 20.f;
+  float cavPursueSeconds = 30.f;   // 敌溃后追击秒数
+  float haStandoff = 50.f;         // 骑射横掠时与敌阵的距离
+  float haSwingOut = 90.f;         // 掠过后甩开的距离
+  float haMovingFire = 0.7f;       // 移动射击命中倍率
+  float haFleeDist = 25.f;         // 敌近此距离立即脱离
+  float haReload = 5.f;            // 骑射装填（弓 6 s，马上略快是因为不列队齐射）
+  int shooterRanks = 3;            // 方阵 / 数阵 / 疏阵只有前几排能射；横列、雁行全射
+
+  // —— 阵形效果 —— 速度 / 转向 / 受箭 / 骑兵勒马所需凝聚 / 冲击倍率 / 全向（无侧背）
+  struct FormMod { float speed, turn, missileTaken, balkCoh, impact; bool allRound, allShoot; };
+  FormMod form[8] = {
+    {1.00f, 1.0f, 1.0f, 0.60f, 1.0f, false, false},   // 方阵：均衡
+    {0.90f, 0.9f, 1.3f, 0.50f, 1.0f, false, false},   // 数阵：密集，抗骑冲，更吃箭，慢
+    {1.05f, 1.1f, 0.6f, 0.90f, 1.0f, false, false},   // 疏阵：少吃箭，挡不住骑兵
+    {0.50f, 1.0f, 1.0f, 0.55f, 1.0f, true,  false},   // 圆阵：无侧背，几乎不能动
+    {1.00f, 1.0f, 1.1f, 0.70f, 1.3f, false, false},   // 锥形：冲击加成
+    {1.00f, 1.0f, 0.9f, 0.75f, 1.0f, false, true },   // 雁行：全员可射，便于交叉射
+    {1.00f, 0.8f, 1.0f, 0.70f, 1.0f, false, true },   // 横列：全员可射，正面最宽，薄
+    {1.15f, 2.0f, 1.2f, 0.95f, 1.0f, false, false},   // 纵队：行军快，不能战
+  };
+
   bool load(const std::string& path);   // 读 key = value，缺省保留
   bool set(const std::string& key, float v);
 };

@@ -67,9 +67,9 @@ const std::vector<ScenarioDef>& scenarios() {
   return v;
 }
 
-void loadScenario(Sim& sim, const ScenarioDef& sc, float dist) {
+void loadScenario(Sim& sim, const ScenarioDef& sc, float dist, float scale) {
   World& w = sim.w;
-  size_t total = 0; for (int sd = 0; sd < 2; sd++) for (auto& u : sc.armies[sd]) total += u.men;
+  size_t total = 0; for (int sd = 0; sd < 2; sd++) for (auto& u : sc.armies[sd]) total += (size_t)(u.men * scale);
   w.s.reserve(total);
   float cx = w.P.worldW * 0.5f, cy = w.P.worldH * 0.5f;
   for (int sd = 0; sd < 2; sd++) {
@@ -78,7 +78,8 @@ void loadScenario(Sim& sim, const ScenarioDef& sc, float dist) {
     float ay = cy - fy * dist * 0.5f;
     int part = 0;
     for (size_t i = 0; i < sc.armies[sd].size(); i++) {
-      const UnitSpec& sp = sc.armies[sd][i];
+      UnitSpec sp = sc.armies[sd][i];
+      if (scale != 1.f) { sp.men = (int)(sp.men * scale); sp.files = (int)(sp.files * sqrtf(scale)); sp.ox *= sqrtf(scale); sp.oy *= sqrtf(scale); }
       float ux = cx + sp.ox * fy, uy = ay + sp.oy * fy;   // 右手系随朝向翻转
       addUnit(sim, sd, sp, ux, uy, 0.f, fy, part + (int)i / 2);
     }

@@ -1,18 +1,19 @@
-// 基准：npm 不需要。用法：wanren_bench [剧本 id] [tick 数] [线程数] [种子]
+// 基准：用法：wanren_bench [剧本 id] [tick 数] [线程数] [种子] [人数倍率]
 #include "../core/sim.hpp"
 #include "../core/ai.hpp"
 #include "../core/scenario.hpp"
 #include <cstdio>
 #include <cstring>
 #include <chrono>
+#include <cmath>
 
 int main(int argc, char** argv) {
-  const char* id = argc > 1 ? argv[1] : "plain"; int ticks = argc > 2 ? atoi(argv[2]) : 3000; int threads = argc > 3 ? atoi(argv[3]) : 0; uint32_t seed = argc > 4 ? atoi(argv[4]) : 1;
+  const char* id = argc > 1 ? argv[1] : "plain"; int ticks = argc > 2 ? atoi(argv[2]) : 3000; int threads = argc > 3 ? atoi(argv[3]) : 0; uint32_t seed = argc > 4 ? atoi(argv[4]) : 1; float scale = argc > 5 ? (float)atof(argv[5]) : 1.f;
   const ScenarioDef* sc = nullptr; for (auto& s : scenarios()) if (s.id == id) sc = &s;
   if (!sc) { printf("未知剧本 %s\n", id); return 1; }
   Sim sim(seed, threads); sim.w.P.load("params.txt");
   ScenarioDef def = *sc; def.aiSide[0] = def.aiSide[1] = true;   // AI 对 AI
-  loadScenario(sim, def);
+  loadScenario(sim, def, 600.f * sqrtf(scale), scale);
   size_t n = sim.w.s.size();
   printf("剧本 %s，%zu 人，线程 %d\n", sc->title.c_str(), n, sim.pool->threads());
   auto t0 = std::chrono::steady_clock::now(); double maxMs = 0; int winner = -1; int t = 0;
