@@ -26,7 +26,7 @@ bool Params::set(const std::string& key, float v) {
   P(mRecover) P(mRecoverCap) P(mCharge) P(mFatigueCap) P(rallyDist) P(rallyMorale)
   P(unitBrokenFrac) P(generalFleeFrac)
   P(hitFlank) P(hitRear) P(hitCohesionSelf) P(hitCohesionEnemy) P(hitRoutTarget) P(hitFatigue)
-  P(slopeSpeed) P(uphillHit) P(downhillHit) P(hillStep) P(forestCover) P(forestImpact) P(heightRange) P(pushSpeed) P(pushRatio) P(centerPush) P(fightMorale) P(routNearPerTick) P(officerSuppress) P(captureProb) P(gapMargin) P(gapSeconds) P(cavMeleeSeconds) P(cavDisengageDist) P(cavReformCohesion) P(cavReformMaxSeconds) P(cavPursueSeconds) P(haStandoff) P(haSwingOut) P(haMovingFire) P(haFleeDist) P(haReload) P(unitSpeedMul) P(contagionIdle) P(contagionCohesion) P(flagVisible) P(orderDelayMin) P(orderDelayMax) P(orderDelayRider) P(orderDelayBase) P(officerRadius)
+  P(attackChargeDist) P(withdrawDist) P(slopeSpeed) P(uphillHit) P(downhillHit) P(hillStep) P(forestCover) P(forestImpact) P(heightRange) P(pushSpeed) P(pushRatio) P(centerPush) P(fightMorale) P(routNearPerTick) P(officerSuppress) P(captureProb) P(gapMargin) P(gapSeconds) P(cavMeleeSeconds) P(cavDisengageDist) P(cavReformCohesion) P(cavReformMaxSeconds) P(cavPursueSeconds) P(haStandoff) P(haSwingOut) P(haMovingFire) P(haFleeDist) P(haReload) P(unitSpeedMul) P(contagionIdle) P(contagionCohesion) P(flagVisible) P(orderDelayMin) P(orderDelayMax) P(orderDelayRider) P(orderDelayBase) P(officerRadius)
   if (key == "routNearCap") { routNearCap = (int)v; return true; }
   if (key == "shooterRanks") { shooterRanks = (int)v; return true; }
   if (key.rfind("armorPierce", 0) == 0 && key.size() == 12) { armorPierce[key[11]-'0'] = v; return true; }

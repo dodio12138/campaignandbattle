@@ -72,23 +72,24 @@ void Sim::processOrders() {
     while (!u.orders.empty() && u.orders.front().execTick <= w.tick) {
       Order o = u.orders.front(); u.orders.pop_front();
       switch (o.type) {
-        case O_MOVE: u.gx = o.x; u.gy = o.y; u.stance = ST_MOVE; u.sidestep = (o.arg == 1); u.cavPhase = CP_NONE; u.cavTarget = -1;
+        case O_MOVE: u.gx = o.x; u.gy = o.y; u.stance = ST_MOVE; u.sidestep = (o.arg == 1); u.cavPhase = CP_NONE; u.cavTarget = -1; u.attackTarget = -1;
           u.faceOnArrive = (o.fx != 0.f || o.fy != 0.f); if (u.faceOnArrive) { float l = len(o.fx, o.fy); u.tfx = o.fx / l; u.tfy = o.fy / l; }
           break;
-        case O_HALT: u.stance = ST_HOLD; u.gx = u.cx; u.gy = u.cy; u.cavPhase = CP_NONE; u.cavTarget = -1; break;
+        case O_HALT: u.stance = ST_HOLD; u.gx = u.cx; u.gy = u.cy; u.cavPhase = CP_NONE; u.cavTarget = -1; u.attackTarget = -1; break;
         case O_CHARGE: u.gx = o.x; u.gy = o.y; u.stance = ST_CHARGE; u.charging = (int)(30.f / P.dt); u.sidestep = false; u.faceOnArrive = false;
           for (int id : u.members) if (w.s.state[id] == S_FORMED) w.s.morale[id] = std::min(100.f, w.s.morale[id] + P.mCharge);
           // 骑兵对指定敌曲：进入冲击循环（冲→接战→脱离→整队→再冲）；弓骑则游射
           if (kindIsCav(u.kind) && o.arg >= 0 && o.arg < (int)w.units.size()) { u.cavTarget = o.arg; u.cavPhase = (u.kind == K_CAV_BOW) ? CP_SWEEP : CP_CHARGE; u.cavTimer = 0; u.cycles = 0; }
           else { u.cavPhase = CP_NONE; u.cavTarget = -1; }
           break;
-        case O_RETREAT: u.gx = o.x; u.gy = o.y; u.stance = ST_RETREAT; u.cavPhase = CP_NONE; u.cavTarget = -1; break;
+        case O_RETREAT: u.gx = o.x; u.gy = o.y; u.stance = ST_RETREAT; u.cavPhase = CP_NONE; u.cavTarget = -1; u.attackTarget = -1; break;
         case O_FIRE: u.fireTarget = o.arg;
           if (u.kind == K_CAV_BOW && o.arg >= 0 && o.arg < (int)w.units.size()) { u.cavTarget = o.arg; u.cavPhase = CP_SWEEP; u.cavTimer = 0; }
           break;
         case O_FORMATION: u.formation = (uint8_t)o.arg; buildSlots(u, P); break;
         case O_FACE: { float l = len(o.x, o.y); if (l > 1e-4f) { u.tfx = o.x / l; u.tfy = o.y / l; u.stance = ST_TURN; u.gx = u.cx; u.gy = u.cy; u.cavPhase = CP_NONE; u.cavTarget = -1; } } break;
         case O_PRONE: u.stance = ST_PRONE; u.gx = u.cx; u.gy = u.cy; break;
+        case O_ATTACK: if (o.arg >= 0 && o.arg < (int)w.units.size()) { u.attackTarget = o.arg; u.stance = ST_MOVE; u.sidestep = false; u.faceOnArrive = false; u.gx = w.units[o.arg].cx; u.gy = w.units[o.arg].cy; u.cavPhase = CP_NONE; u.cavTarget = -1; } break;
         case O_RISE: u.stance = ST_HOLD; break;
       }
     }
@@ -200,6 +201,24 @@ void Sim::updateUnitsPre() {
   }
   for (auto& u : w.units) {
     if (u.alive == 0) continue;
+    // O_ATTACK：跟踪敌曲行进，到 45 m 转冲锋
+    if (u.attackTarget >= 0) {
+      const Unit& T = w.units[u.attackTarget];
+      if (T.alive + T.routed == 0) { u.attackTarget = -1; u.stance = ST_HOLD; u.gx = u.cx; u.gy = u.cy; }
+      else if (u.stance == ST_MOVE) { u.gx = T.cx; u.gy = T.cy; if (len(T.cx - u.cx, T.cy - u.cy) < P.attackChargeDist) { u.stance = ST_CHARGE; u.charging = (int)(30.f / P.dt); for (int id : u.members) if (w.s.state[id] == S_FORMED) w.s.morale[id] = std::min(100.f, w.s.morale[id] + P.mCharge); u.attackTarget = -1; } }
+      else if (u.stance == ST_HOLD) u.attackTarget = -1;
+    }
+    // 弓弩自保：敌步兵近而未接战 → 平移退到最近本方步兵曲身后，退不了就直退
+    if (u.autoWithdraw && kindIsMissile(u.kind) && !kindIsCav(u.kind) && w.tick % 10 == u.id % 10 && w.tick - u.lastEngagedTick > 30 && u.stance != ST_PRONE) {
+      int e = unitNearEnemyId[u.id];
+      if (e >= 0 && !kindIsCav(w.units[e].kind) && unitNearEnemy[u.id] - w.units[e].hy - u.hy < P.withdrawDist) {
+        const Unit& E = w.units[e]; float ax = u.cx - E.cx, ay = u.cy - E.cy, al = len(ax, ay); if (al < 1e-3f) { ax = -u.fx; ay = -u.fy; al = 1; } ax /= al; ay /= al;
+        int g = -1; float gd = 150.f; for (auto& v : w.units) { if (v.side != u.side || v.id == u.id || kindIsMissile(v.kind) || kindIsCav(v.kind) || v.alive < 50) continue; float dd = len(v.cx - u.cx, v.cy - u.cy); if (dd < gd && (v.cx - u.cx) * ax + (v.cy - u.cy) * ay > 0) { gd = dd; g = v.id; } }
+        Order o{O_MOVE, 0, 0, 1};
+        if (g >= 0) { const Unit& G = w.units[g]; o.x = G.cx + ax * (G.hy + u.hy + 8.f); o.y = G.cy + ay * (G.hy + u.hy + 8.f); } else { o.x = u.cx + ax * 60.f; o.y = u.cy + ay * 60.f; }
+        if (!(u.stance == ST_MOVE && len(u.gx - o.x, u.gy - o.y) < 10.f)) issue(u.id, o, true);
+      }
+    }
     if (kindIsCav(u.kind)) cavalryBrain(u);
     bool engagedRecently = w.tick - u.lastEngagedTick < 10;
     const Params::FormMod& fm = P.form[u.formation];

@@ -247,6 +247,27 @@ int main() {
     printf("   平地对攻 90 s：甲伤 %d 乙伤 %d；乙居高：甲伤 %d 乙伤 %d\n", flat.first, flat.second, up.first, up.second);
     CHECK((float)up.first / std::max(1, up.second) > (float)flat.first / std::max(1, flat.second), "仰攻一方吃亏");
   }
+  // 15. 行进到接敌再冲：200 m 外下 O_ATTACK，到 45 m 内才冲锋；弓弩自保：敌步兵逼近自动退到本方步兵身后
+  {
+    Sim sim(16, 1);
+    UnitSpec sp{"戟", K_HALBERD, 400}; sp.files = 40;
+    int a = addUnit(sim, 0, sp, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, sp, 500, 700, 0, -1, 0); sim.finalize();
+    sim.issue(a, {O_ATTACK, 0, 0, b}, true);
+    int chargeAt = -1; float chargeDist = 0;
+    for (int t = 0; t < 1500; t++) { sim.step(); const Unit& A = sim.w.units[a]; if (chargeAt < 0 && A.stance == ST_CHARGE) { chargeAt = t; chargeDist = hypotf(sim.w.units[b].cx - A.cx, sim.w.units[b].cy - A.cy); } }
+    printf("   O_ATTACK：%d s 后转冲锋，当时距敌 %.0f m，疲劳 %.0f\n", chargeAt / 10, chargeDist, sim.unitFatigue[a]);
+    CHECK(chargeAt > 0 && chargeDist < 50.f && chargeDist > 20.f, "到 45 m 内才冲锋");
+    Sim s2(17, 1);
+    UnitSpec xb{"弩", K_XBOW, 300}; xb.formation = F_LINE; xb.files = 100;
+    UnitSpec inf{"步", K_HALBERD, 600}; inf.files = 30;
+    int x = addUnit(s2, 0, xb, 500, 520, 0, 1, 0); int g = addUnit(s2, 0, inf, 500, 470, 0, 1, 0); int e = addUnit(s2, 1, inf, 500, 640, 0, -1, 0); s2.finalize();
+    s2.w.units[x].autoWithdraw = true;
+    s2.issue(e, {O_MOVE, 500, 560}, true);
+    for (int t = 0; t < 1800; t++) s2.step();
+    const Unit& X = s2.w.units[x]; const Unit& G = s2.w.units[g];
+    printf("   弓弩自保：敌步兵到 %.0f，弩手 y=%.0f（步兵 y=%.0f），弩手亡伤 %d\n", s2.w.units[e].cy, X.cy, G.cy, X.dead + X.wounded);
+    CHECK(X.cy < G.cy && X.dead + X.wounded < 30, "弩手退到步兵身后且几乎无损");
+  }
   printf(fails ? "\n%d 项失败\n" : "\n全部通过\n", fails);
   return fails ? 1 : 0;
 }

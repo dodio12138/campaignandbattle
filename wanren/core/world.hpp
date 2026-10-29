@@ -26,7 +26,7 @@ inline const char* formationName(uint8_t f) {
 enum Stance : uint8_t { ST_HOLD, ST_MOVE, ST_CHARGE, ST_RETREAT, ST_PRONE, ST_TURN, ST_DISENGAGE };  // 伏盾 = ST_PRONE；ST_TURN = 原地轮转；ST_DISENGAGE = 骑兵脱离（不接战，疾驰回整队点）
 enum CavPhase : uint8_t { CP_NONE, CP_CHARGE, CP_MELEE, CP_DISENGAGE, CP_REFORM, CP_PURSUE, CP_SWEEP, CP_SWING };
 inline const char* cavPhaseName(uint8_t p) { static const char* n[] = {"", "冲击", "接战", "脱离", "整队", "追击", "游射", "回旋"}; return p < 8 ? n[p] : ""; }
-enum OrderType : uint8_t { O_MOVE, O_HALT, O_CHARGE, O_RETREAT, O_FIRE, O_FORMATION, O_FACE, O_PRONE, O_RISE };
+enum OrderType : uint8_t { O_MOVE, O_HALT, O_CHARGE, O_RETREAT, O_FIRE, O_FORMATION, O_FACE, O_PRONE, O_RISE, O_ATTACK };   // O_ATTACK：步兵行进到敌曲 45 m 再冲（省疲劳）
 
 struct Order {
   OrderType type; float x = 0, y = 0; int arg = -1;   // O_MOVE: arg 0 行进（朝向随行进方向）/ 1 平移（保持朝向横走、倒走）
@@ -61,7 +61,9 @@ struct Unit {
   int alive = 0, dead = 0, wounded = 0, routed = 0, captured = 0;
   float gapX = 0, gapHW = 0, gapTimer = 0;
   float routX = 0, routY = 0;                       // 本曲溃兵的重心（追击用）
-  bool fireDiscipline = false;                      // 弩待敌进入有效射程再射（AI 方默认开；对骑兵仍可远射）          // 让路：局部 x 处开口（薄横列被友军成阵穿过时）
+  bool fireDiscipline = false;                      // 弩待敌进入有效射程再射（AI 方默认开；对骑兵仍可远射）
+  bool autoWithdraw = false;                        // 弓弩自保：敌步兵近 30 m 且未接战时自动退到本方步兵身后（玩家方弓弩默认开）
+  int attackTarget = -1;                            // O_ATTACK 跟踪的敌曲          // 让路：局部 x 处开口（薄横列被友军成阵穿过时）
   bool cavThreat = false;                           // 侧后有敌骑
   int charging = 0;                                 // 冲锋中剩余 tick
   int balking = 0;                                  // 本 tick 勒马徘徊的骑兵数

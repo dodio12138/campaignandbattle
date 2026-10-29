@@ -135,6 +135,9 @@ struct Params {
   float forestImpact = 0.5f;       // 林中骑兵冲击倍率
   float heightRange = 0.012f;      // 每米高差改变射程的比例（高处射远）
 
+  float attackChargeDist = 45.f;   // O_ATTACK：距敌曲此距离转为冲锋
+  float withdrawDist = 30.f;       // 弓弩自保触发距离
+
   bool load(const std::string& path);   // 读 key = value，缺省保留
   bool set(const std::string& key, float v);
 };

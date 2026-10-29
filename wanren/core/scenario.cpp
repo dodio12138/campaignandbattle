@@ -101,7 +101,7 @@ void loadScenario(Sim& sim, const ScenarioDef& sc, float dist, float scale) {
       addUnit(sim, sd, sp, ux, uy, 0.f, fy, part + (int)i / 2);
     }
   }
-  for (auto& u : w.units) if (w.sides[u.side].ai && kindIsMissile(u.kind) && !kindIsCav(u.kind)) u.fireDiscipline = true;
+  for (auto& u : w.units) if (kindIsMissile(u.kind) && !kindIsCav(u.kind)) { if (w.sides[u.side].ai) u.fireDiscipline = true; else u.autoWithdraw = true; }
   sim.finalize();
   sim.log(sc.title + "：" + sc.note);
 }

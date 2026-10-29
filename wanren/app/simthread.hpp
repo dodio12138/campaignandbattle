@@ -14,6 +14,7 @@
 struct UnitView {
   int id; uint8_t side, kind, formation, stance; bool elite, officerAlive, flagAlive, broken, ordersPending;
   float cx, cy, fx, fy, gx, gy, cohesion, moraleAvg, fatigue; int alive, dead, wounded, routed; uint8_t cavPhase; int cycles;
+  int part; int captured; uint8_t pendType; float pendX, pendY; int pendTicks; int attackTarget; float hx, hy;
 };
 struct Snapshot {
   int generation = 0, tick = 0; float time = 0; double stepMs = 0; double actualSpeed = 0;
@@ -30,6 +31,7 @@ class SimThread {
   static constexpr float SPEEDS[] = {0.5f, 1.f, 2.f, 4.f, 8.f, 16.f, 32.f, 0.f};   // 0 = 最快（不限速）
   static constexpr int NSPEED = 8;
   std::atomic<int> speedIdx{1}; std::atomic<bool> paused{false}; std::atomic<int> stepOnce{0};
+  std::atomic<int> jump{0};   // 1 = 最快跑到下一事件（接敌 / 齐射 / 溃 / 纪事）后自动回 ×1
   std::vector<std::string> unitNames; std::string title;   // 不随 tick 变，载入时取一次
   int player = 0;
 
@@ -77,7 +79,7 @@ class SimThread {
     sn->generation = generation_; sn->tick = sim_->w.tick; sn->time = sim_->w.time(); sn->stepMs = sim_->lastStepMs; sn->actualSpeed = actual_;
     sn->x = s.x; sn->y = s.y; sn->side = s.side; sn->state = s.state; sn->kind = s.kind; sn->flags = s.flags; sn->unit = s.unit;
     sn->units.resize(sim_->w.units.size());
-    for (size_t i = 0; i < sim_->w.units.size(); i++) { const Unit& u = sim_->w.units[i]; sn->units[i] = {u.id, u.side, u.kind, u.formation, u.stance, u.elite, u.officerAlive, u.flagAlive, u.broken, !u.orders.empty(), u.cx, u.cy, u.fx, u.fy, u.gx, u.gy, u.cohesion, u.moraleAvg, sim_->unitFatigue[u.id], u.alive, u.dead, u.wounded, u.routed, u.cavPhase, u.cycles}; }
+    for (size_t i = 0; i < sim_->w.units.size(); i++) { const Unit& u = sim_->w.units[i]; sn->units[i] = {u.id, u.side, u.kind, u.formation, u.stance, u.elite, u.officerAlive, u.flagAlive, u.broken, !u.orders.empty(), u.cx, u.cy, u.fx, u.fy, u.gx, u.gy, u.cohesion, u.moraleAvg, sim_->unitFatigue[u.id], u.alive, u.dead, u.wounded, u.routed, u.cavPhase, u.cycles, u.part, u.captured, (uint8_t)(u.orders.empty() ? 255 : u.orders.front().type), u.orders.empty() ? 0.f : u.orders.front().x, u.orders.empty() ? 0.f : u.orders.front().y, u.orders.empty() ? 0 : u.orders.front().execTick - sim_->w.tick, u.attackTarget, u.hx, u.hy}; }
     sn->sides[0] = sim_->w.sides[0]; sn->sides[1] = sim_->w.sides[1];
     const auto& ev = sim_->w.events; size_t ne = std::min<size_t>(14, ev.size()); sn->events.assign(ev.end() - ne, ev.end());
     sn->shots = sim_->shots; sn->terrain = terrain_; sn->ended = ended_; sn->winner = winner_; sn->threads = sim_->pool->threads(); sn->nSoldiers = s.size();
@@ -97,7 +99,7 @@ class SimThread {
       if (!sim_) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); continue; }
       bool single = stepOnce.exchange(0) > 0;
       if ((paused || ended_) && !single) { publish(false); next = clk::now(); std::this_thread::sleep_for(std::chrono::milliseconds(5)); continue; }
-      float sp = SPEEDS[speedIdx.load()];
+      float sp = jump.load() ? 0.f : SPEEDS[speedIdx.load()];
       if (sp > 0 && !single) {
         double period = sim_->w.P.dt / sp;
         next += std::chrono::duration_cast<clk::duration>(std::chrono::duration<double>(period));
@@ -105,7 +107,13 @@ class SimThread {
         if (next > now) std::this_thread::sleep_until(next);
         else if (std::chrono::duration<double>(now - next).count() > 0.5) next = now;   // 跟不上：丢弃积欠，不再追
       }
+      size_t evBefore = sim_->w.events.size(); int engBefore = 0; for (auto& u : sim_->w.units) if (u.lastEngagedTick == sim_->w.tick) engBefore++;
       tick();
+      if (jump.load()) {
+        bool hit = sim_->w.events.size() != evBefore || ended_;
+        if (!hit) for (auto& u : sim_->w.units) if (u.lastEngagedTick == sim_->w.tick && engBefore == 0) { hit = true; break; }
+        if (hit) { jump = 0; speedIdx = 1; }
+      }
       tickWindow_++;
       auto now2 = clk::now(); double win = std::chrono::duration<double>(now2 - windowStart_).count();
       if (win >= 0.5) { actual_ = tickWindow_ * sim_->w.P.dt / win; tickWindow_ = 0; windowStart_ = now2; }
