@@ -23,6 +23,8 @@ struct Sim {
   std::vector<std::vector<int32_t>> routsByBlock;   // +i 溃走，-(i+1) 收拢
   std::vector<UnitAcc> accByBlock;           // nBlocks × units
   std::vector<BBox> bboxByBlock;
+  std::vector<int> quietByBlock;   // 统计：走快路径（不扫邻居）的人数
+  long quietTotal = 0, scanTotal = 0;
   std::vector<UnitSpeed> unitSpeed;
   std::vector<float> unitNearEnemy;          // 最近敌曲中心距离
   std::vector<int> unitNearEnemyId;

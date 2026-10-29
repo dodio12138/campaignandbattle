@@ -10,9 +10,18 @@ inline const char* terrainName(uint8_t t) { static const char* n[] = {"旷野", 
 
 struct Terrain {
   float cell = 10.f; int w = 1, h = 1; float worldW = 3000, worldH = 3000;
-  std::vector<float> height; std::vector<uint8_t> type;
+  std::vector<float> height; std::vector<uint8_t> type; std::vector<uint8_t> flat;   // flat：旷野且四邻高差 < 0.2 m（士卒可走快路径）
   std::vector<std::pair<float, float>> fords;   // 渡口中心（供绕行）
-  void init(float W, float H) { worldW = W; worldH = H; w = (int)(W / cell) + 1; h = (int)(H / cell) + 1; height.assign((size_t)w * h, 0.f); type.assign((size_t)w * h, T_OPEN); fords.clear(); }
+  void init(float W, float H) { worldW = W; worldH = H; w = (int)(W / cell) + 1; h = (int)(H / cell) + 1; height.assign((size_t)w * h, 0.f); type.assign((size_t)w * h, T_OPEN); flat.assign((size_t)w * h, 1); fords.clear(); }
+  void finalize() {   // 剧本摆完地形后调用
+    flat.assign((size_t)w * h, 0);
+    for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) {
+      size_t k = (size_t)j * w + i; if (type[k] != T_OPEN) continue; float h0 = height[k]; bool ok = true;
+      for (int dj = -1; dj <= 1 && ok; dj++) for (int di = -1; di <= 1 && ok; di++) { int ii = std::clamp(i + di, 0, w - 1), jj = std::clamp(j + dj, 0, h - 1); size_t kk = (size_t)jj * w + ii; if (type[kk] != T_OPEN || fabsf(height[kk] - h0) > 0.2f) ok = false; }
+      flat[k] = ok;
+    }
+  }
+  inline bool flatAt(float x, float y) const { return flat[(size_t)iy(y) * w + ix(x)] != 0; }
   inline int ix(float x) const { int c = (int)(x / cell); return c < 0 ? 0 : (c >= w ? w - 1 : c); }
   inline int iy(float y) const { int c = (int)(y / cell); return c < 0 ? 0 : (c >= h ? h - 1 : c); }
   inline float heightAt(float x, float y) const { return height[(size_t)iy(y) * w + ix(x)]; }

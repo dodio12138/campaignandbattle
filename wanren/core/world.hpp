@@ -52,6 +52,7 @@ struct Unit {
   uint8_t stance = ST_HOLD;
   int fireTarget = -1;                              // 射击目标曲
   float reload = 0;                                 // 齐射计时（秒）
+  int volleyLeft = 0, volleyTarget = -1, volleyShots = 0, volleyHits = 0; float volleyRange = 0, volleyMax = 0, volleyHit = 0, volleyDmg = 0;   // 齐射窗口：分 10 个 tick 发完
   std::vector<int32_t> members;                     // 槽位 → 士卒下标
   std::vector<float> slotX, slotY;                  // 槽位局部坐标（x 右，y 前）
   int officer = -1, flag = -1;                      // 军候、旗手（士卒下标）

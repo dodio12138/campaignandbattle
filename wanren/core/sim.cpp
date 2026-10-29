@@ -25,7 +25,7 @@ void Sim::computeBBox() {
 }
 
 void Sim::finalize() {
-  grid.init(w.P);
+  grid.init(w.P); w.terrain.finalize();
   for (auto& u : w.units) {
     buildSlots(u, w.P);
     int n = (int)u.members.size();
@@ -43,7 +43,7 @@ void Sim::finalize() {
   size_t n = w.s.size(), U = w.units.size();
   nx = w.s.x; ny = w.s.y; engaged.assign(n, 0);
   int nbS = (int)((n + BLOCK_SOLDIER - 1) / BLOCK_SOLDIER), nbM = (int)((n + BLOCK_MORALE - 1) / BLOCK_MORALE);
-  attacksByBlock.resize(nbS); bboxByBlock.resize(nbS); routsByBlock.resize(nbM); accByBlock.resize((size_t)nbM * U);
+  attacksByBlock.resize(nbS); bboxByBlock.resize(nbS); quietByBlock.assign(nbS, 0); routsByBlock.resize(nbM); accByBlock.resize((size_t)nbM * U);
   unitSpeed.resize(U); unitNearEnemy.assign(U, 1e9f); unitNearEnemyId.assign(U, -1); unitFatigue.assign(U, 0);
   computeBBox();
   grid.build(w.s, bbox.minx, bbox.miny, bbox.maxx, bbox.maxy);
@@ -333,6 +333,11 @@ void Sim::soldierBlock(int block) {
     float fleex = 0, fleey = 0; int enemyNear = 0, friend3 = 0, enemy3 = 0, routNear = 0;
     uint8_t mySide = s.side[i];
     const float sepR2 = P.sepRadius * P.sepRadius;
+    // 无事者快路径：3×3 格内无敌、无本方溃兵，且本曲不乱 → 不扫邻居（只追槽位，省掉分离力；4 m 搜索半径下 3×3 格已覆盖）
+    int cellI = grid.cellOf[i];
+    bool needScan = chargingU || st != S_FORMED || u.cohesion <= 0.5f || cellI < 0 || grid.sum3(grid.sideCount[1 - mySide], cellI) != 0 || grid.sum3(grid.routCount[mySide], cellI) != 0;
+    if (!needScan) quietByBlock[block]++;
+    if (needScan)
     grid.forNear(px, py, searchR, [&](const Packed& p) {
       if (p.idx == i) return;
       float dx = p.x - px, dy = p.y - py, d2 = dx * dx + dy * dy;
@@ -349,7 +354,7 @@ void Sim::soldierBlock(int block) {
     s.routNear[i] = (uint8_t)std::min(routNear, 255); s.push[i] = 0;
     float ndist = nearest ? sqrtf(nd) : 1e9f;
     const UnitSpeed& us = unitSpeed[s.unit[i]];
-    const Terrain& T = w.terrain; uint8_t tt = T.typeAt(px, py);
+    const Terrain& T = w.terrain; bool flatT = T.flatAt(px, py); uint8_t tt = flatT ? (uint8_t)T_OPEN : T.typeAt(px, py);
     float spd = (st == S_ROUT ? us.rout : (chargingU || disengaging || freeMoveU) ? (cav ? us.run : (s.armor[i] >= 2 ? P.runFootArmored : P.runFoot)) : us.walk) * (1.f - s.fatigue[i] / 200.f) * Terrain::speedMul(tt == T_WATER ? T_FORD : tt);
     float vx = 0, vy = 0; bool fighting = false;
 
@@ -421,11 +426,11 @@ void Sim::soldierBlock(int block) {
     vx += sepx * P.sepForce; vy += sepy * P.sepForce;
     float vl = len(vx, vy); float cap = st == S_ROUT ? spd : std::max(spd * Terrain::speedMul(tt == T_WATER ? T_FORD : tt), 1.5f * Terrain::speedMul(tt == T_WATER ? T_FORD : tt));
     if (vl > cap) { vx *= cap / vl; vy *= cap / vl; }
-    // 上坡减速
-    if (vl > 1e-3f) { float sl = T.slope(px, py, vx / vl, vy / vl); if (sl > 0.f) { float m = std::max(0.4f, 1.f - sl * P.slopeSpeed); vx *= m; vy *= m; } }
+    // 上坡减速（平坦旷野跳过）
+    if (!flatT && vl > 1e-3f) { float sl = T.slope(px, py, vx / vl, vy / vl); if (sl > 0.f) { float m = std::max(0.4f, 1.f - sl * P.slopeSpeed); vx *= m; vy *= m; } }
     s.vx[i] = vx; s.vy[i] = vy;
     float qx = clampf(px + vx * dt, 1.f, P.worldW - 1.f), qy = clampf(py + vy * dt, 1.f, P.worldH - 1.f);
-    if (T.blocked(qx, qy) && !T.blocked(px, py)) { qx = px; qy = py; s.vx[i] = s.vy[i] = 0; }   // 水不可入（已在水里的往外走）
+    if (!flatT && T.blocked(qx, qy) && !T.blocked(px, py)) { qx = px; qy = py; s.vx[i] = s.vy[i] = 0; }   // 水不可入（已在水里的往外走）
     nx[i] = qx; ny[i] = qy;
     bb.minx = std::min(bb.minx, qx); bb.maxx = std::max(bb.maxx, qx); bb.miny = std::min(bb.miny, qy); bb.maxy = std::max(bb.maxy, qy);
     if (st != S_ROUT) {
@@ -513,43 +518,52 @@ void Sim::resolveAttacks() {
 void Sim::volleys() {
   const Params& P = w.P; auto& s = w.s;
   if (!shots.empty() && w.tick - shots.front().tick > 20) { size_t k = 0; while (k < shots.size() && w.tick - shots[k].tick > 20) k++; shots.erase(shots.begin(), shots.begin() + k); }
+  const int WIN = 10;   // 一轮齐射分 10 个 tick 发完：消掉尖峰，画面上也更像持续的箭雨
   for (auto& u : w.units) {
     if (!kindIsMissile(u.kind) || u.alive == 0 || u.stance == ST_PRONE) continue;
-    u.reload -= P.dt;
-    if (u.reload > 0) continue;
     bool ha = (u.kind == K_CAV_BOW);
-    if (w.tick - u.lastEngagedTick < (ha ? 5 : 20)) continue;
-    float range, maxR, hitP, dmg, reloadT;
-    switch (u.kind) {
-      case K_XBOW: range = P.xbowRange; maxR = P.xbowMax; hitP = P.xbowHit; dmg = P.xbowDmg; reloadT = P.xbowReload; break;
-      case K_HXBOW: range = P.hxbowRange; maxR = P.hxbowMax; hitP = P.hxbowHit; dmg = P.hxbowDmg; reloadT = P.hxbowReload; break;
-      default: range = P.bowRange; maxR = P.bowMax; hitP = P.bowHit; dmg = P.bowDmg; reloadT = P.bowReload; break;
+    if (u.volleyLeft <= 0) {
+      u.reload -= P.dt;
+      if (u.reload > 0) continue;
+      if (w.tick - u.lastEngagedTick < (ha ? 5 : 20)) continue;
+      float range, maxR, hitP, dmg, reloadT;
+      switch (u.kind) {
+        case K_XBOW: range = P.xbowRange; maxR = P.xbowMax; hitP = P.xbowHit; dmg = P.xbowDmg; reloadT = P.xbowReload; break;
+        case K_HXBOW: range = P.hxbowRange; maxR = P.hxbowMax; hitP = P.hxbowHit; dmg = P.hxbowDmg; reloadT = P.hxbowReload; break;
+        default: range = P.bowRange; maxR = P.bowMax; hitP = P.bowHit; dmg = P.bowDmg; reloadT = P.bowReload; break;
+      }
+      if (ha) { reloadT = P.haReload; hitP *= P.haMovingFire; }
+      int tgt = u.fireTarget;
+      if (tgt < 0 || w.units[tgt].alive == 0 || len(w.units[tgt].cx - u.cx, w.units[tgt].cy - u.cy) > maxR) tgt = nearestEnemyUnit(u.id, maxR);
+      if (tgt < 0) { u.reload = 1.f; continue; }
+      const Unit& T = w.units[tgt];
+      float dist = len(T.cx - u.cx, T.cy - u.cy);
+      if (dist < P.missileMinRange) { u.reload = 1.f; continue; }
+      { float dh = w.terrain.heightAt(u.cx, u.cy) - w.terrain.heightAt(T.cx, T.cy); float rm = clampf(1.f + dh * P.heightRange, 0.8f, 1.25f); range *= rm; maxR *= rm; }
+      if (u.fireDiscipline && dist > range && !kindIsCav(T.kind)) { u.reload = 0.5f; continue; }
+      u.volleyLeft = WIN; u.volleyTarget = tgt; u.volleyShots = 0; u.volleyHits = 0; u.volleyRange = range; u.volleyMax = maxR; u.volleyHit = hitP; u.volleyDmg = dmg;
+      u.reload = reloadT * w.rng.range(0.9f, 1.1f);
     }
-    if (ha) { reloadT = P.haReload; hitP *= P.haMovingFire; }
-    const Params::FormMod& fmU = P.form[u.formation];
-    int tgt = u.fireTarget;
-    if (tgt < 0 || w.units[tgt].alive == 0 || len(w.units[tgt].cx - u.cx, w.units[tgt].cy - u.cy) > maxR) tgt = nearestEnemyUnit(u.id, maxR);
-    if (tgt < 0) { u.reload = 1.f; continue; }
+    // 窗口内：本 tick 发射 members 中 mi % WIN == 当前片 的人
+    int slice = WIN - u.volleyLeft; u.volleyLeft--;
+    int tgt = u.volleyTarget; if (tgt < 0 || w.units[tgt].alive + w.units[tgt].routed == 0) { u.volleyLeft = 0; continue; }
     const Unit& T = w.units[tgt];
     float dist = len(T.cx - u.cx, T.cy - u.cy);
-    if (dist < P.missileMinRange) { u.reload = 1.f; continue; }
-    { float dh = w.terrain.heightAt(u.cx, u.cy) - w.terrain.heightAt(T.cx, T.cy); float rm = clampf(1.f + dh * P.heightRange, 0.8f, 1.25f); range *= rm; maxR *= rm; }   // 居高射远
-    if (u.fireDiscipline && dist > range && !kindIsCav(T.kind)) { u.reload = 0.5f; continue; }   // 待敌近：进入有效射程再齐射
-    float rangeMul = dist <= range ? 1.f : std::max(0.f, (maxR - dist) / (maxR - range));
+    float rangeMul = dist <= u.volleyRange ? 1.f : std::max(0.f, (u.volleyMax - dist) / std::max(1.f, u.volleyMax - u.volleyRange));
     float sigma = dist * P.volleySpread + 2.f;
-    int shotN = 0, hits = 0;
-    for (size_t mi = 0; mi < u.members.size(); mi++) {
+    const Params::FormMod& fmU = P.form[u.formation];
+    for (size_t mi = (size_t)slice; mi < u.members.size(); mi += WIN) {
       int id = u.members[mi];
       if (s.state[id] != S_FORMED) continue;
-      if (!ha && !fmU.allShoot) { int rank = (int)((u.frontY - u.slotY[mi]) / P.rankGap + 0.5f); if (rank >= P.shooterRanks) continue; }   // 深阵只有前几排能射
-      shotN++;
+      if (!ha && !fmU.allShoot) { int rank = (int)((u.frontY - u.slotY[mi]) / P.rankGap + 0.5f); if (rank >= P.shooterRanks) continue; }
+      u.volleyShots++;
       float ax = T.cx + w.rng.gauss() * sigma, ay = T.cy + w.rng.gauss() * sigma;
       int best = -1; float bd = 2.25f;
       grid.forNear(ax, ay, 1.5f, [&](const Packed& p) { if (p.side == u.side) return; float dx = p.x - ax, dy = p.y - ay, d2 = dx * dx + dy * dy; if (d2 < bd) { bd = d2; best = p.idx; } });
       shots.push_back({s.x[id], s.y[id], ax, ay, w.tick, u.side, false});
       if (best < 0 || s.state[best] >= S_WOUNDED) continue;
       const Unit& tu = w.units[s.unit[best]];
-      float p = hitP * rangeMul * P.form[tu.formation].missileTaken;
+      float p = u.volleyHit * rangeMul * P.form[tu.formation].missileTaken;
       float ix = u.cx - s.x[best], iy = u.cy - s.y[best], il = len(ix, iy); float cosA = il > 1e-4f ? (ix * tu.fx + iy * tu.fy) / il : 1.f;
       if ((s.flags[best] & 1) && cosA > 0.3f && s.state[best] == S_FORMED) p *= (1.f - P.shieldArrow);
       if (s.state[best] == S_ROUT) p *= 1.5f;
@@ -557,12 +571,11 @@ void Sim::volleys() {
       if (w.rng.uni() >= p) continue;
       float red = P.armorArrow[s.armor[best]]; if (u.kind == K_HXBOW) red *= P.hxbowArmorBreak;
       if (s.flags[best] & 32) red = std::max(red, P.horseArmorArrow);
-      s.hp[best] += dmg * (1.f - red);
-      hits++; shots.back().hit = true; shots.back().x1 = s.x[best]; shots.back().y1 = s.y[best];
+      s.hp[best] += u.volleyDmg * (1.f - red);
+      u.volleyHits++; shots.back().hit = true; shots.back().x1 = s.x[best]; shots.back().y1 = s.y[best];
       if (s.hp[best] >= P.hp) applyDown(best, u.members[0], true);
     }
-    u.reload = reloadT * w.rng.range(0.9f, 1.1f);
-    if (shotN >= 200 && hits * 10 >= shotN) log(u.name + "齐射，所中必倒");
+    if (u.volleyLeft == 0 && u.volleyShots >= 200 && u.volleyHits * 10 >= u.volleyShots) log(u.name + "齐射，所中必倒");
   }
 }
 
@@ -674,7 +687,9 @@ void Sim::step() {
   grid.build(w.s, bbox.minx, bbox.miny, bbox.maxx, bbox.maxy, pool.get()); lap(1);
   std::fill(engaged.begin(), engaged.end(), 0);
   int nbS = (int)((grid.order.size() + BLOCK_SOLDIER - 1) / BLOCK_SOLDIER);
+  std::fill(quietByBlock.begin(), quietByBlock.end(), 0);
   pool->parallelBlocks(nbS, [this](int b) { soldierBlock(b); });
+  for (int b = 0; b < nbS; b++) quietTotal += quietByBlock[b]; scanTotal += (long)grid.order.size();
   std::swap(w.s.x, nx); std::swap(w.s.y, ny);
   bbox = BBox{}; for (int b = 0; b < nbS; b++) { const BBox& q = bboxByBlock[b]; bbox.minx = std::min(bbox.minx, q.minx); bbox.maxx = std::max(bbox.maxx, q.maxx); bbox.miny = std::min(bbox.miny, q.miny); bbox.maxy = std::max(bbox.maxy, q.maxy); }
   if (bbox.minx > bbox.maxx) bbox = {0, 0, 1, 1};
