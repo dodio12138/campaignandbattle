@@ -79,6 +79,7 @@ void Sim::processOrders() {
         case O_CHARGE: u.gx = o.x; u.gy = o.y; u.stance = ST_CHARGE; u.charging = (int)(30.f / P.dt); u.sidestep = false; u.faceOnArrive = false;
           for (int id : u.members) if (w.s.state[id] == S_FORMED) w.s.morale[id] = std::min(100.f, w.s.morale[id] + P.mCharge);
           // 骑兵对指定敌曲：进入冲击循环（冲→接战→脱离→整队→再冲）；弓骑则游射
+          u.giveUp = false;
           if (kindIsCav(u.kind) && o.arg >= 0 && o.arg < (int)w.units.size()) { u.cavTarget = o.arg; u.cavPhase = (u.kind == K_CAV_BOW) ? CP_SWEEP : CP_CHARGE; u.cavTimer = 0; u.cycles = 0; }
           else { u.cavPhase = CP_NONE; u.cavTarget = -1; }
           break;
@@ -110,13 +111,92 @@ void Sim::startDisengage(Unit& u, float awayX, float awayY) {
   const Params& P = w.P;
   u.rallyX = clampf(u.cx + awayX * P.cavDisengageDist, 5.f, P.worldW - 5.f); u.rallyY = clampf(u.cy + awayY * P.cavDisengageDist, 5.f, P.worldH - 5.f);
   u.cavPhase = CP_DISENGAGE; u.cavTimer = 0; u.stance = ST_DISENGAGE; u.gx = u.rallyX; u.gy = u.rallyY; u.charging = 0;
+  if (u.formation == F_WAVE && u.nWaves > 0) resetWaves(u);
+}
+
+void Sim::resetWaves(Unit& u) {
+  u.waveQueue.clear();
+  for (int k = 0; k <= u.nWaves; k++) { u.wavePhase[k] = WP_READY; u.waveTimer[k] = 0; u.waveContact[k] = -1; }
+  for (int k = 0; k < u.nWaves; k++) { u.waveQueue.push_back(k); u.waveY[k] = u.waveBase[k]; }
+  u.waveY[u.nWaves] = u.waveBase[u.nWaves]; u.reserveCommitted = false; u.waveLaunchTimer = 0;
+}
+
+// 波次轮冲（《六韬·均兵》）：首波冲、接战数秒、拨马回旋到队尾，次波接上；预备队待敌阵动摇乘隙突入
+// 返回 true 表示本 tick 已处理（不走整曲冲击逻辑）
+bool Sim::waveBrain(Unit& u, const Unit& T, float ux, float uy, float d, bool targetBroken, bool exhausted) {
+  const Params& P = w.P; auto& s = w.s; int nW = u.nWaves;
+  float gapE = d - T.hy - u.waveBase[0];                     // 首波阵线到敌阵前沿
+  u.freeMove = true; u.tfx = ux; u.tfy = uy; u.sidestep = false; u.faceOnArrive = false; u.charging = 0;
+  float standX = T.cx - ux * (T.hy + u.waveBase[0] + P.waveStandoff), standY = T.cy - uy * (T.hy + u.waveBase[0] + P.waveStandoff);
+  bool blocked = (u.stance == ST_HOLD);                        // 上 tick 被友军挡住（行进逻辑把它停下了）
+  u.stance = ST_MOVE; u.gx = standX; u.gy = standY;
+  if (u.broken) { startDisengage(u, -ux, -uy); return true; }
+  if (u.cavPhase == CP_CHARGE) {                              // 接近：整曲疏开推进到二十步外
+    if (gapE < P.waveStandoff + 15.f || (blocked && gapE < P.waveStandoff + 80.f)) { u.cavPhase = CP_WAVES; u.cavTimer = 0; log(u.name + "五骑为列，前后相去二十步，次第冲突"); }
+    else if (exhausted || u.cavTimer > 90.f) { u.cavPhase = CP_NONE; u.cavTarget = -1; u.freeMove = false; u.stance = ST_HOLD; u.gx = u.cx; u.gy = u.cy; }   // 久近不得：放弃，另择目标
+    return true;
+  }
+  // CP_WAVES
+  if (targetBroken) { resetWaves(u); u.cavPhase = CP_PURSUE; u.cavTimer = 0; u.freeMove = false; return false; }
+  if (exhausted) { startDisengage(u, -ux, -uy); return true; }
+  if (u.cycles >= 3 * nW && T.cohesion > 0.8f && T.routed * 10 < T.alive) {   // 轮冲三遍敌阵不动：撤出，另择目标（不硬耗）
+    startDisengage(u, -ux, -uy); u.giveUp = true; log(u.name + "三冲不动，引去"); return true;
+  }
+  float attackY = u.waveBase[0] + std::max(0.f, gapE) + 10.f;
+  u.waveLaunchTimer -= P.dt;
+  bool anyAttack = false;
+  for (int k = 0; k <= nW; k++) {
+    if (u.wavePhase[k] == WP_READY) continue;
+    u.waveTimer[k] += P.dt;
+    int alive = 0, fight = 0, balk = 0, home = 0;
+    for (size_t mi = 0; mi < u.members.size(); mi++) {
+      if (u.slotWave[mi] != k) continue; int id = u.members[mi]; if (s.state[id] >= S_WOUNDED || s.state[id] == S_ROUT) continue;
+      alive++; if (engaged[id] == 1) fight++; else if (engaged[id] == 2) balk++;
+      if (u.wavePhase[k] == WP_RETURN) { float qx, qy; slotWorld(u, (int)mi, qx, qy); float ex = qx - s.x[id], ey = qy - s.y[id]; if (ex * ex + ey * ey < 25.f) home++; }
+    }
+    if (u.wavePhase[k] == WP_ATTACK) {
+      anyAttack = true; u.waveY[k] = attackY;
+      if (fight > 0 && u.waveContact[k] < 0) u.waveContact[k] = 0;
+      if (u.waveContact[k] >= 0) u.waveContact[k] += P.dt;
+      bool done = alive == 0 || u.waveContact[k] > P.cavMeleeSeconds || (balk > alive * 0.3f && u.waveTimer[k] > 3.f) || u.waveTimer[k] > 25.f;
+      if (done) {   // 拨马回旋：冲击波回到队尾，预备队回原处
+        u.wavePhase[k] = WP_RETURN; u.waveTimer[k] = 0; u.waveContact[k] = -1;
+        if (k < nW) u.waveQueue.push_back(k);
+      }
+    } else if (u.wavePhase[k] == WP_RETURN) {
+      if (alive == 0 || home >= alive * P.waveReturnFrac || u.waveTimer[k] > 30.f) { u.wavePhase[k] = WP_READY; u.waveTimer[k] = 0; }
+    }
+  }
+  for (size_t q = 0; q < u.waveQueue.size(); q++) u.waveY[u.waveQueue[q]] = u.waveBase[q];   // 在列各波依次补位
+  if (u.wavePhase[nW] != WP_ATTACK) u.waveY[nW] = u.waveBase[nW];
+  // 预备队：敌阵动摇（凝聚 < 0.4 或溃者过四分之一）乘隙突入
+  if (!u.reserveCommitted && u.wavePhase[nW] == WP_READY && (T.cohesion < 0.4f || T.routed * 4 > T.alive + T.routed)) {
+    u.reserveCommitted = true; u.wavePhase[nW] = WP_ATTACK; u.waveTimer[nW] = 0; u.waveContact[nW] = -1;
+    for (size_t mi = 0; mi < u.members.size(); mi++) if (u.slotWave[mi] == nW && s.state[u.members[mi]] == S_FORMED) s.morale[u.members[mi]] = std::min(100.f, s.morale[u.members[mi]] + P.mCharge);
+    log(u.name + "预备队乘隙突入");
+  }
+  // 发下一波：上一波已拨马（无冲击波在场）、队首一波已归位、间隔已到
+  bool launched = false;
+  // 已无人的波退出轮换
+  for (size_t q = 0; q < u.waveQueue.size();) { int k = u.waveQueue[q]; bool any = false; for (size_t mi = 0; mi < u.members.size() && !any; mi++) if (u.slotWave[mi] == k) { int id = u.members[mi]; if (s.state[id] == S_FORMED || s.state[id] == S_RALLY) any = true; } if (!any) u.waveQueue.erase(u.waveQueue.begin() + q); else q++; }
+  if (!anyAttack && !u.waveQueue.empty() && u.waveLaunchTimer <= 0.f) {
+    int k = u.waveQueue.front();
+    if (u.wavePhase[k] == WP_READY) {
+      u.waveQueue.erase(u.waveQueue.begin()); u.wavePhase[k] = WP_ATTACK; u.waveTimer[k] = 0; u.waveContact[k] = -1; u.waveY[k] = attackY;
+      u.waveLaunchTimer = P.waveLaunchGap; u.cycles++; launched = true;
+      for (size_t mi = 0; mi < u.members.size(); mi++) if (u.slotWave[mi] == k && s.state[u.members[mi]] == S_FORMED) s.morale[u.members[mi]] = std::min(100.f, s.morale[u.members[mi]] + P.mCharge * 0.5f);
+    }
+  }
+  (void)launched;
+  return true;
 }
 
 // 骑兵用法状态机（无镫时代：一冲即走，整队再冲；骑射横掠游射）
 void Sim::cavalryBrain(Unit& u) {
   const Params& P = w.P;
   if (u.cavPhase == CP_NONE) { u.freeMove = false; return; }
-  if (u.cavPhase != CP_SWEEP && u.cavPhase != CP_SWING) u.freeMove = false;
+  bool waves = (u.formation == F_WAVE && u.nWaves > 0);
+  if (u.cavPhase != CP_SWEEP && u.cavPhase != CP_SWING && !(waves && (u.cavPhase == CP_CHARGE || u.cavPhase == CP_WAVES))) u.freeMove = false;
   if (u.cavTarget < 0 || u.cavTarget >= (int)w.units.size()) { u.cavPhase = CP_NONE; u.cavTarget = -1; return; }
   const Unit& T = w.units[u.cavTarget];
   if (T.alive + T.routed == 0) { u.cavPhase = CP_NONE; u.cavTarget = -1; u.stance = ST_HOLD; u.gx = u.cx; u.gy = u.cy; return; }
@@ -126,6 +206,10 @@ void Sim::cavalryBrain(Unit& u) {
   bool engagedNow = w.tick - u.lastEngagedTick < 5;
   bool exhausted = unitFatigue[u.id] > 85.f || u.alive < 20 || u.moraleAvg < 35.f;
   auto keepCharging = [&] { u.stance = ST_CHARGE; u.charging = std::max(u.charging, 10); u.gx = T.cx; u.gy = T.cy; u.sidestep = false; u.faceOnArrive = false; };
+  if (waves && (u.cavPhase == CP_CHARGE || u.cavPhase == CP_WAVES || u.cavPhase == CP_MELEE)) {
+    if (u.cavPhase == CP_MELEE) u.cavPhase = CP_WAVES;
+    if (waveBrain(u, T, ux, uy, d, targetBroken, exhausted)) return;
+  }
   switch (u.cavPhase) {
     case CP_CHARGE:
       keepCharging();
@@ -147,7 +231,7 @@ void Sim::cavalryBrain(Unit& u) {
       bool ready = u.cohesion > P.cavReformCohesion && unitFatigue[u.id] < 60.f && !engagedNow && u.stance == ST_HOLD;
       if (engagedNow && u.cavTimer > 3.f) startDisengage(u, -ux, -uy);     // 整队时被追上：再退
       else if (ready || u.cavTimer > P.cavReformMaxSeconds) {
-        if (exhausted) { u.cavPhase = CP_NONE; u.cavTarget = -1; }
+        if (exhausted || u.giveUp) { u.cavPhase = CP_NONE; u.cavTarget = -1; u.giveUp = false; }
         else { u.cavPhase = targetBroken ? CP_PURSUE : CP_CHARGE; u.cavTimer = 0; for (int id : u.members) if (w.s.state[id] == S_FORMED) w.s.morale[id] = std::min(100.f, w.s.morale[id] + P.mCharge * 0.5f); }
       }
       break; }
@@ -156,6 +240,7 @@ void Sim::cavalryBrain(Unit& u) {
       if (u.cavTimer > P.cavPursueSeconds || exhausted || !targetBroken) startDisengage(u, -ux, -uy);
       break;
     case CP_SWEEP: case CP_SWING: {
+      if (u.outOfAmmo) { u.cavPhase = CP_NONE; u.cavTarget = -1; u.freeMove = false; startDisengage(u, -ux, -uy); u.giveUp = true; break; }
       // 骑射：沿敌正面横掠（距 standoff），掠到头甩开 swingOut 再反向掠回；敌近则立即甩开
       float rx = T.fy, ry = -T.fx;                     // 敌阵右侧方向
       float lcx = T.cx + T.fx * (P.haStandoff + T.hy), lcy = T.cy + T.fy * (P.haStandoff + T.hy);
@@ -209,9 +294,9 @@ void Sim::updateUnitsPre() {
       else if (u.stance == ST_HOLD) u.attackTarget = -1;
     }
     // 弓弩自保：敌步兵近而未接战 → 平移退到最近本方步兵曲身后，退不了就直退
-    if (u.autoWithdraw && kindIsMissile(u.kind) && !kindIsCav(u.kind) && w.tick % 10 == u.id % 10 && w.tick - u.lastEngagedTick > 30 && u.stance != ST_PRONE) {
+    if ((u.autoWithdraw || u.outOfAmmo) && kindIsMissile(u.kind) && !kindIsCav(u.kind) && w.tick % 10 == u.id % 10 && w.tick - u.lastEngagedTick > 30 && u.stance != ST_PRONE) {
       int e = unitNearEnemyId[u.id];
-      if (e >= 0 && !kindIsCav(w.units[e].kind) && unitNearEnemy[u.id] - w.units[e].hy - u.hy < P.withdrawDist) {
+      if (e >= 0 && ((u.outOfAmmo && unitNearEnemy[u.id] < 400.f && u.stance == ST_HOLD) || (!kindIsCav(w.units[e].kind) && unitNearEnemy[u.id] - w.units[e].hy - u.hy < P.withdrawDist))) {
         const Unit& E = w.units[e]; float ax = u.cx - E.cx, ay = u.cy - E.cy, al = len(ax, ay); if (al < 1e-3f) { ax = -u.fx; ay = -u.fy; al = 1; } ax /= al; ay /= al;
         int g = -1; float gd = 150.f; for (auto& v : w.units) { if (v.side != u.side || v.id == u.id || kindIsMissile(v.kind) || kindIsCav(v.kind) || v.alive < 50) continue; float dd = len(v.cx - u.cx, v.cy - u.cy); if (dd < gd && (v.cx - u.cx) * ax + (v.cy - u.cy) * ay > 0) { gd = dd; g = v.id; } }
         Order o{O_MOVE, 0, 0, 1};
@@ -284,10 +369,11 @@ void Sim::updateUnitsPre() {
           float stepL = std::min(d, spd * mul * P.dt);
           // 中心也不入水：直走被挡则依次试 ±30°、±60°、±90°、±120°
           const Terrain& T = w.terrain; float mx = tx, my = ty;
-          auto clear = [&](float rx_, float ry_) { return !T.blocked(u.cx + rx_ * 3.f, u.cy + ry_ * 3.f) && !T.blocked(u.cx + rx_ * 8.f, u.cy + ry_ * 8.f) && !T.blocked(u.cx + rx_ * 15.f, u.cy + ry_ * 15.f); };
+          bool cavU = kindIsCav(u.kind);
+          auto clear = [&](float rx_, float ry_) { return !T.blockedFor(u.cx + rx_ * 3.f, u.cy + ry_ * 3.f, cavU) && !T.blockedFor(u.cx + rx_ * 8.f, u.cy + ry_ * 8.f, cavU) && !T.blockedFor(u.cx + rx_ * 15.f, u.cy + ry_ * 15.f, cavU); };
           bool ok = clear(tx, ty);
           for (int k = 1; k <= 5 && !ok; k++) for (int sg = -1; sg <= 1 && !ok; sg += 2) { float ang = sg * k * 0.5236f, c = cosf(ang), sn = sinf(ang); float rx_ = tx * c - ty * sn, ry_ = tx * sn + ty * c; if (clear(rx_, ry_)) { mx = rx_; my = ry_; ok = true; } }
-          if (!ok) { ok = !T.blocked(u.cx + tx * 3.f, u.cy + ty * 3.f); }   // 实在没有：只要眼前 3 m 不是水就走
+          if (!ok) { ok = !T.blockedFor(u.cx + tx * 3.f, u.cy + ty * 3.f, cavU); }   // 实在没有：只要眼前 3 m 不是水就走
           if (ok) { u.cx += mx * stepL; u.cy += my * stepL; }
         }
       }
@@ -328,6 +414,11 @@ void Sim::soldierBlock(int block) {
     float reach = k_ == K_HALBERD ? P.reachHalberd : k_ == K_SPEAR ? P.reachSpear : (k_ == K_CAV || k_ == K_CAV_ARMORED) ? P.reachLance : cav ? P.reachCavSword : P.reachSword;
     bool chargingU = (u.stance == ST_CHARGE || u.charging > 0);
     bool disengaging = (u.stance == ST_DISENGAGE); bool freeMoveU = u.freeMove;
+    bool waveAttack = false;
+    if (u.cavPhase == CP_WAVES && !u.slotWave.empty()) {   // 波次轮冲：各波各行其是
+      uint8_t wph = u.wavePhase[u.slotWave[s.slot[i]]];
+      waveAttack = (wph == WP_ATTACK); chargingU = waveAttack; disengaging = (wph == WP_RETURN);
+    }
     float searchR = chargingU ? 8.f : 4.f;
     float sepx = 0, sepy = 0; const Packed* nearest = nullptr; float nd = 1e9f;
     float fleex = 0, fleey = 0; int enemyNear = 0, friend3 = 0, enemy3 = 0, routNear = 0;
@@ -385,7 +476,7 @@ void Sim::soldierBlock(int block) {
         else {
           float cdS = k_ == K_HALBERD ? P.cdHalberd : k_ == K_SPEAR ? P.cdSpear : (k_ == K_CAV || k_ == K_CAV_ARMORED) ? P.cdLance : P.cdSword;
           s.cd[i] = (uint8_t)(cdS / dt);
-          bool impact = cav && (u.charging > 0) && (len(s.vx[i], s.vy[i]) > 4.f) && !balk;
+          bool impact = cav && (u.charging > 0 || waveAttack) && (len(s.vx[i], s.vy[i]) > 4.f) && !balk;
           uint8_t type = (k_ == K_SWORD || kindIsMissile(k_)) ? 1 : 0;
           buf.push_back({i, nearest->idx, type, impact});
         }
@@ -430,7 +521,7 @@ void Sim::soldierBlock(int block) {
     if (!flatT && vl > 1e-3f) { float sl = T.slope(px, py, vx / vl, vy / vl); if (sl > 0.f) { float m = std::max(0.4f, 1.f - sl * P.slopeSpeed); vx *= m; vy *= m; } }
     s.vx[i] = vx; s.vy[i] = vy;
     float qx = clampf(px + vx * dt, 1.f, P.worldW - 1.f), qy = clampf(py + vy * dt, 1.f, P.worldH - 1.f);
-    if (!flatT && T.blocked(qx, qy) && !T.blocked(px, py)) { qx = px; qy = py; s.vx[i] = s.vy[i] = 0; }   // 水不可入（已在水里的往外走）
+    if (!flatT && T.blockedFor(qx, qy, cav) && !T.blockedFor(px, py, cav)) { qx = px; qy = py; s.vx[i] = s.vy[i] = 0; }   // 水不可入、马不越车营（已在里面的往外走）
     nx[i] = qx; ny[i] = qy;
     bb.minx = std::min(bb.minx, qx); bb.maxx = std::max(bb.maxx, qx); bb.miny = std::min(bb.miny, qy); bb.maxy = std::max(bb.maxy, qy);
     if (st != S_ROUT) {
@@ -495,6 +586,7 @@ void Sim::resolveAttacks() {
     if (ka == K_SWORD && kindIsLong(kt) && al < 1.3f) hit *= 1.2f;
     if (kindIsMissile(ka)) hit *= 0.6f;
     if (A.impact) hit *= 1.5f;
+    if (w.terrain.typeAt(s.x[a], s.y[a]) == T_STOCKADE) hit *= P.stockadeClimb;   // 翻越车营者难以施展
     { float ha = w.terrain.heightAt(s.x[a], s.y[a]), ht = w.terrain.heightAt(s.x[t], s.y[t]); if (ha < ht - P.hillStep) hit *= P.uphillHit; else if (ha > ht + P.hillStep) hit *= P.downhillHit; }
     if (s.state[t] != S_ROUT) s.morale[t] -= (front ? 0.f : P.mFlank) * (A.impact ? P.cavFlankMul : 1.f);
     if (w.rng.uni() >= hit) return 0.f;
@@ -522,7 +614,9 @@ void Sim::volleys() {
   for (auto& u : w.units) {
     if (!kindIsMissile(u.kind) || u.alive == 0 || u.stance == ST_PRONE) continue;
     bool ha = (u.kind == K_CAV_BOW);
+    bool xb = (u.kind == K_XBOW || u.kind == K_HXBOW) && P.xbowStagger;
     if (u.volleyLeft <= 0) {
+      if (u.ammo <= 0.f) continue;
       u.reload -= P.dt;
       if (u.reload > 0) continue;
       if (w.tick - u.lastEngagedTick < (ha ? 5 : 20)) continue;
@@ -542,6 +636,7 @@ void Sim::volleys() {
       { float dh = w.terrain.heightAt(u.cx, u.cy) - w.terrain.heightAt(T.cx, T.cy); float rm = clampf(1.f + dh * P.heightRange, 0.8f, 1.25f); range *= rm; maxR *= rm; }
       if (u.fireDiscipline && dist > range && !kindIsCav(T.kind)) { u.reload = 0.5f; continue; }
       u.volleyLeft = WIN; u.volleyTarget = tgt; u.volleyShots = 0; u.volleyHits = 0; u.volleyRange = range; u.volleyMax = maxR; u.volleyHit = hitP; u.volleyDmg = dmg;
+      if (xb) { u.volleyGroup ^= 1; reloadT *= 0.5f; }   // 弩分两番迭射：一番张弩、一番发，箭不断
       u.reload = reloadT * w.rng.range(0.9f, 1.1f);
     }
     // 窗口内：本 tick 发射 members 中 mi % WIN == 当前片 的人
@@ -555,7 +650,16 @@ void Sim::volleys() {
     for (size_t mi = (size_t)slice; mi < u.members.size(); mi += WIN) {
       int id = u.members[mi];
       if (s.state[id] != S_FORMED) continue;
+      if (xb && (int)((mi / WIN) & 1) != u.volleyGroup) continue;
       if (!ha && !fmU.allShoot) { int rank = (int)((u.frontY - u.slotY[mi]) / P.rankGap + 0.5f); if (rank >= P.shooterRanks) continue; }
+      // 射线上有本方士卒（本曲之外）：弩平射不能发；弓抛射越过，命中打折
+      bool overFriend = false;
+      if (!ha) {
+        float sx0 = s.x[id], sy0 = s.y[id], ddx = T.cx - sx0, ddy = T.cy - sy0, L = len(ddx, ddy);
+        if (L > 1.f) { ddx /= L; ddy /= L; float t0 = (u.frontY - u.slotY[mi]) + 4.f, t1 = L - T.hy - 6.f;
+          for (float tt = t0; tt < t1; tt += 4.f) { int c = grid.idx(sx0 + ddx * tt, sy0 + ddy * tt); if (grid.sideCount[u.side][c] > 0) { overFriend = true; break; } } }
+      }
+      if (overFriend && xb) continue;
       u.volleyShots++;
       float ax = T.cx + w.rng.gauss() * sigma, ay = T.cy + w.rng.gauss() * sigma;
       int best = -1; float bd = 2.25f;
@@ -563,7 +667,8 @@ void Sim::volleys() {
       shots.push_back({s.x[id], s.y[id], ax, ay, w.tick, u.side, false});
       if (best < 0 || s.state[best] >= S_WOUNDED) continue;
       const Unit& tu = w.units[s.unit[best]];
-      float p = u.volleyHit * rangeMul * P.form[tu.formation].missileTaken;
+      float p = u.volleyHit * rangeMul * P.form[tu.formation].missileTaken * (overFriend ? P.bowOverhead : 1.f);
+      { float bx = s.x[best], by = s.y[best]; float ex = u.cx - bx, ey = u.cy - by, el = len(ex, ey); if (el > 1.f && (w.terrain.typeAt(bx, by) == T_STOCKADE || w.terrain.typeAt(bx + ex / el * 8.f, by + ey / el * 8.f) == T_STOCKADE)) p *= P.stockadeCover; }
       float ix = u.cx - s.x[best], iy = u.cy - s.y[best], il = len(ix, iy); float cosA = il > 1e-4f ? (ix * tu.fx + iy * tu.fy) / il : 1.f;
       if ((s.flags[best] & 1) && cosA > 0.3f && s.state[best] == S_FORMED) p *= (1.f - P.shieldArrow);
       if (s.state[best] == S_ROUT) p *= 1.5f;
@@ -575,7 +680,10 @@ void Sim::volleys() {
       u.volleyHits++; shots.back().hit = true; shots.back().x1 = s.x[best]; shots.back().y1 = s.y[best];
       if (s.hp[best] >= P.hp) applyDown(best, u.members[0], true);
     }
-    if (u.volleyLeft == 0 && u.volleyShots >= 200 && u.volleyHits * 10 >= u.volleyShots) log(u.name + "齐射，所中必倒");
+    if (u.volleyLeft == 0) {
+      if (u.volleyShots > 0) { u.ammo -= xb ? 0.5f : 1.f; if (u.ammo <= 0.f && !u.outOfAmmo) { u.outOfAmmo = true; log(u.name + "矢尽"); } }
+      if (u.volleyShots >= 100 && u.volleyHits * 10 >= u.volleyShots) log(u.name + "齐射，所中必倒");
+    }
   }
 }
 

@@ -15,6 +15,7 @@ struct UnitView {
   int id; uint8_t side, kind, formation, stance; bool elite, officerAlive, flagAlive, broken, ordersPending;
   float cx, cy, fx, fy, gx, gy, cohesion, moraleAvg, fatigue; int alive, dead, wounded, routed; uint8_t cavPhase; int cycles;
   int part; int captured; uint8_t pendType; float pendX, pendY; int pendTicks; int attackTarget; float hx, hy;
+  float ammo; uint8_t rearKind; bool guard;
 };
 struct Snapshot {
   int generation = 0, tick = 0; float time = 0; double stepMs = 0; double actualSpeed = 0;
@@ -79,7 +80,7 @@ class SimThread {
     sn->generation = generation_; sn->tick = sim_->w.tick; sn->time = sim_->w.time(); sn->stepMs = sim_->lastStepMs; sn->actualSpeed = actual_;
     sn->x = s.x; sn->y = s.y; sn->side = s.side; sn->state = s.state; sn->kind = s.kind; sn->flags = s.flags; sn->unit = s.unit;
     sn->units.resize(sim_->w.units.size());
-    for (size_t i = 0; i < sim_->w.units.size(); i++) { const Unit& u = sim_->w.units[i]; sn->units[i] = {u.id, u.side, u.kind, u.formation, u.stance, u.elite, u.officerAlive, u.flagAlive, u.broken, !u.orders.empty(), u.cx, u.cy, u.fx, u.fy, u.gx, u.gy, u.cohesion, u.moraleAvg, sim_->unitFatigue[u.id], u.alive, u.dead, u.wounded, u.routed, u.cavPhase, u.cycles, u.part, u.captured, (uint8_t)(u.orders.empty() ? 255 : u.orders.front().type), u.orders.empty() ? 0.f : u.orders.front().x, u.orders.empty() ? 0.f : u.orders.front().y, u.orders.empty() ? 0 : u.orders.front().execTick - sim_->w.tick, u.attackTarget, u.hx, u.hy}; }
+    for (size_t i = 0; i < sim_->w.units.size(); i++) { const Unit& u = sim_->w.units[i]; sn->units[i] = {u.id, u.side, u.kind, u.formation, u.stance, u.elite, u.officerAlive, u.flagAlive, u.broken, !u.orders.empty(), u.cx, u.cy, u.fx, u.fy, u.gx, u.gy, u.cohesion, u.moraleAvg, sim_->unitFatigue[u.id], u.alive, u.dead, u.wounded, u.routed, u.cavPhase, u.cycles, u.part, u.captured, (uint8_t)(u.orders.empty() ? 255 : u.orders.front().type), u.orders.empty() ? 0.f : u.orders.front().x, u.orders.empty() ? 0.f : u.orders.front().y, u.orders.empty() ? 0 : u.orders.front().execTick - sim_->w.tick, u.attackTarget, u.hx, u.hy, u.ammo, u.rearKind, u.guard}; }
     sn->sides[0] = sim_->w.sides[0]; sn->sides[1] = sim_->w.sides[1];
     const auto& ev = sim_->w.events; size_t ne = std::min<size_t>(14, ev.size()); sn->events.assign(ev.end() - ne, ev.end());
     sn->shots = sim_->shots; sn->terrain = terrain_; sn->ended = ended_; sn->winner = winner_; sn->threads = sim_->pool->threads(); sn->nSoldiers = s.size();

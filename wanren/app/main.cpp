@@ -17,7 +17,7 @@ struct Camera {
 
 static const uint32_t C_RED = RGBA(176, 36, 36), C_BLUE = RGBA(36, 72, 170), C_INK = RGBA(40, 30, 20), C_GREY = RGBA(120, 110, 100), C_GOLD = RGBA(220, 160, 20);
 static const char* HELP1 = "左键 点选 / 框选 / 双击选整部    右键 行进 (拖动 = 到达后面向该方向; Shift 冲 / Alt 退 / Ctrl 平移)    右键点敌曲: 步兵行进到接敌再冲, 突骑反复冲击, 弓弩射, 弓骑游射";
-static const char* HELP2 = "H 止  R 退  P 伏盾/起  F 面向鼠标  L 列阵    F1–F8 换阵: 方 数 疏 圆 锥 雁 横 纵    Ctrl+1–9 编组  1–9 选组  A 全选    空格 暂停  . 单步  [ ] 倍速  J 跳到下一事件    Z 缩放到选中  Home 回本阵  G 本方交 AI  Ctrl+N 重开  Tab 换剧本";
+static const char* HELP2 = "H 止  R 退  P 伏盾/起  F 面向鼠标  L 列阵    F1–F9 换阵: 方 数 疏 圆 锥 雁 横 纵 波次(骑)    Ctrl+1–9 编组  1–9 选组  A 全选    空格 暂停  . 单步  [ ] 倍速  J 跳到下一事件    Z 缩放到选中  Home 回本阵  G 本方交 AI  Ctrl+N 重开  Tab 换剧本";
 
 struct App {
   SDL_Window* win = nullptr; SDL_GLContext ctx = nullptr; Gfx gfx; Camera cam; float dpi = 1.f;
@@ -47,6 +47,7 @@ struct App {
         case T_WATER: r = 150; g = 180; b = 205; break;
         case T_FORD: r = 190; g = 200; b = 195; break;
         case T_MARSH: r = 170; g = 175; b = 130; break;
+        case T_STOCKADE: r = 120; g = 85; b = 50; break;
         default: { float sh = 1.f - hn * 0.28f; r = (uint8_t)(237 * sh); g = (uint8_t)(227 * sh); b = (uint8_t)(204 * sh); }
       }
       if (t == T_OPEN || t == T_FOREST) { float hh = T.height[k]; float m = fmodf(hh, 3.f); if (m < 0.35f && hh > 0.5f) { r = (uint8_t)(r * 0.85f); g = (uint8_t)(g * 0.85f); b = (uint8_t)(b * 0.85f); } }
@@ -152,7 +153,7 @@ struct App {
       else if (k == SDLK_p) for (int u : sel) order(u, {s->units[u].stance == ST_PRONE ? O_RISE : O_PRONE});
       else if (k == SDLK_f) { float wx, wy; cam.toWorld(mx * dpi, my * dpi, wx, wy); for (int u : sel) order(u, {O_FACE, wx - s->units[u].cx, wy - s->units[u].cy}); }
       else if (k == SDLK_l) orderLineUp(*s);
-      else if (k >= SDLK_F1 && k <= SDLK_F8) for (int u : sel) order(u, {O_FORMATION, 0, 0, (int)(k - SDLK_F1)});
+      else if (k >= SDLK_F1 && k <= SDLK_F9) for (int u : sel) { if (k == SDLK_F9 && !kindIsCav(s->units[u].kind)) continue; order(u, {O_FORMATION, 0, 0, (int)(k - SDLK_F1)}); }   // F9 波次仅骑兵
       else if (k >= SDLK_1 && k <= SDLK_9) { int gi = k - SDLK_0; if (ctrl) groups[gi] = sel; else if (!groups[gi].empty()) { if (!(m & KMOD_SHIFT)) sel.clear(); for (int u : groups[gi]) if (s->units[u].alive > 0) sel.insert(u); } }
       else if (k == SDLK_a && !ctrl) { sel.clear(); for (auto& u : s->units) if (u.side == player && u.alive > 0) sel.insert(u.id); }
       else if (k == SDLK_a && ctrl) { sel.clear(); for (auto& u : s->units) if (u.side == player && u.alive > 0) sel.insert(u.id); }
@@ -237,7 +238,8 @@ struct App {
         gfx.rect(bx, by, bw, bh, RGBA(0, 0, 0, 50)); gfx.rect(bx, by, bw * std::clamp(u.moraleAvg / 100.f, 0.f, 1.f), bh, moraleColor(u.moraleAvg));
         gfx.rect(bx, by + bh + 1.5f * dpi, bw, bh, RGBA(0, 0, 0, 50)); gfx.rect(bx, by + bh + 1.5f * dpi, bw * std::clamp(u.cohesion, 0.f, 1.f), bh, RGBA(90, 90, 100));
       }
-      if ((cam.zoom > 0.9f * dpi && !fast) || isSel) {
+      bool firstOfPart = u.id == 0 || s.units[u.id - 1].part != u.part || s.units[u.id - 1].side != u.side;   // 同部只标第一曲，放大后全标
+      if (((cam.zoom > 0.9f * dpi && (firstOfPart || cam.zoom > 2.5f * dpi)) && !fast) || isSel) {
         std::string lab = st.unitNames[u.id] + (u.stance == ST_PRONE ? "(伏)" : "");
         if (isSel) lab += " " + std::to_string(u.alive);
         float tw = gfx.textWidth(lab); gfx.flush(); gfx.text(lab, sx - tw * 0.5f, sy - fl * 2.2f - gfx.lineH() - 2, c);
@@ -308,7 +310,9 @@ struct App {
       for (int u : sel) {
         const UnitView& U = s.units[u];
         char cav[32] = ""; if (U.cavPhase) snprintf(cav, sizeof cav, " %s·第%d轮", cavPhaseName(U.cavPhase), U.cycles);
-        snprintf(buf, sizeof buf, "%s [%s%s] %s  存%d 亡%d 伤%d 降%d 溃%d  疲%.0f%s%s%s%s", st.unitNames[u].c_str(), kindName(U.kind), U.elite ? "·精" : "", formationName(U.formation), U.alive, U.dead, U.wounded, U.captured, U.routed, U.fatigue, cav, U.officerAlive ? "" : " 军候殁", U.flagAlive ? "" : " 旗倒", U.pendType != 255 ? " 令在途" : "");
+        char kn[64]; snprintf(kn, sizeof kn, "%s%s%s", kindName(U.kind), U.rearKind != 255 ? "+" : "", U.rearKind != 255 ? kindName(U.rearKind) : "");
+        char am[24] = ""; if (kindIsMissile(U.kind)) snprintf(am, sizeof am, "  矢%.0f", std::max(0.f, U.ammo));
+        snprintf(buf, sizeof buf, "%s [%s%s] %s%s  存%d 亡%d 伤%d 降%d 溃%d  疲%.0f%s%s%s%s", st.unitNames[u].c_str(), kn, U.elite ? "·精" : "", formationName(U.formation), am, U.alive, U.dead, U.wounded, U.captured, U.routed, U.fatigue, cav, U.officerAlive ? "" : " 军候殁", U.flagAlive ? "" : " 旗倒", U.pendType != 255 ? " 令在途" : "");
         gfx.text(buf, pad, y, C_INK);
         float bx = dw - (mmSize + 320) * dpi, bw = 110 * dpi, bh = lh * 0.45f;   // 条放在小地图左侧
         gfx.rect(bx, y + lh * 0.15f, bw, bh, RGBA(0, 0, 0, 40)); gfx.rect(bx, y + lh * 0.15f, bw * std::clamp(U.moraleAvg / 100.f, 0.f, 1.f), bh, moraleColor(U.moraleAvg));

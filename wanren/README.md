@@ -7,7 +7,7 @@
 ```bash
 brew install sdl2 cmake               # macOS（中文用系统 CoreText，不需要 SDL2_ttf；Linux 另装 sdl2_ttf）
 npm run build                          # = cmake -S . -B build && cmake --build build
-./build/wanren [jieqiao|plain] [--seed N] [--side 0|1]   # 图形程序
+./build/wanren [jieqiao|plain|mobei] [--seed N] [--side 0|1]   # 图形程序
 ./build/wanren jieqiao --screenshot out.bmp --ticks 1800  # 无交互：跑 N tick 截图退出（验证用）
 ./build/wanren_bench plain 3000 [线程数] [种子]            # 基准（AI 对 AI）
 ./build/wanren_test                                       # 回归测试

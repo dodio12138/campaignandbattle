@@ -49,6 +49,8 @@ struct Sim {
   void updateUnitsPre();
   void cavalryBrain(Unit& u);
   void startDisengage(Unit& u, float awayX, float awayY);
+  void resetWaves(Unit& u);
+  bool waveBrain(Unit& u, const Unit& T, float ux, float uy, float d, bool targetBroken, bool exhausted);
   void soldierBlock(int block);
   void resolveAttacks();
   void volleys();

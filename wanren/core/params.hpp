@@ -103,7 +103,7 @@ struct Params {
 
   // —— 阵形效果 —— 速度 / 转向 / 受箭 / 骑兵勒马所需凝聚 / 冲击倍率 / 全向（无侧背）
   struct FormMod { float speed, turn, missileTaken, balkCoh, impact; bool allRound, allShoot; };
-  FormMod form[8] = {
+  FormMod form[9] = {
     {1.00f, 1.0f, 1.0f, 0.60f, 1.0f, false, false},   // 方阵：均衡
     {0.90f, 0.9f, 1.3f, 0.50f, 1.0f, false, false},   // 数阵：密集，抗骑冲，更吃箭，慢
     {1.05f, 1.1f, 0.6f, 0.90f, 1.0f, false, false},   // 疏阵：少吃箭，挡不住骑兵
@@ -112,6 +112,7 @@ struct Params {
     {1.00f, 1.0f, 0.9f, 0.75f, 1.0f, false, true },   // 雁行：全员可射，便于交叉射
     {1.00f, 0.8f, 1.0f, 0.70f, 1.0f, false, true },   // 横列：全员可射，正面最宽，薄
     {1.15f, 2.0f, 1.2f, 0.95f, 1.0f, false, false},   // 纵队：行军快，不能战
+    {1.00f, 1.2f, 0.7f, 0.90f, 1.0f, false, false},   // 波次：骑兵疏开，受箭少
   };
 
   // —— 推挤、阵线弯折、久战 ——
@@ -135,6 +136,25 @@ struct Params {
   float forestImpact = 0.5f;       // 林中骑兵冲击倍率
   float heightRange = 0.012f;      // 每米高差改变射程的比例（高处射远）
 
+  // —— 骑兵波次（《六韬·均兵》：五骑为一列，前后相去二十步，左右四步……周环各复故处）——
+  float waveGap = 28.f;            // 波与波前后相距（二十步 ≈ 28 m）
+  float waveFileGap = 2.5f;        // 骑与骑左右（原文四步 ≈ 5.5 m；万人尺度下全按原文一曲会宽到一公里，取 2.5 m，可调）
+  float waveRankGap = 3.f;         // 波内各排前后
+  int waveRanks = 3;               // 每波排数
+  int waveCount = 3;               // 冲击波数（不含预备队）
+  float reserveFrac = 0.25f;       // 预备队比例
+  float reserveGap = 20.f;         // 预备队在末波之后再退的距离
+  float waveStandoff = 30.f;       // 首波与敌阵前沿保持的距离
+  float waveLaunchGap = 2.f;       // 相邻两波出发的最短间隔（秒）
+  float waveReturnFrac = 0.7f;     // 回旋到位比例达到即视为归位
+  // —— 远程补充（v0.8）——
+  int xbowStagger = 1;             // 1 = 弩分两番迭射
+  float bowOverhead = 0.6f;        // 弓隔友军抛射命中倍率（弩平射，隔友军不能射）
+  float bowAmmo = 30.f, xbowAmmo = 25.f, hxbowAmmo = 20.f, haAmmo = 30.f;   // 每人随身矢数（待核：居延简有「矢五十」一类记载，此处取保守值）
+  float stockadeCover = 0.6f;      // 车营后受箭倍率
+  float stockadeClimb = 0.6f;      // 攻方翻越车营时近战命中倍率
+  int longRanks = 3;               // 长短兵混编时前几排为长兵
+  int guardMen = 120;              // 主将麾下亲兵人数
   float attackChargeDist = 45.f;   // O_ATTACK：距敌曲此距离转为冲锋
   float withdrawDist = 30.f;       // 弓弩自保触发距离
 

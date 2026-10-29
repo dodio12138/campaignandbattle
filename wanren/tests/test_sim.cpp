@@ -71,9 +71,9 @@ int main() {
     for (int t = 0; t < 300; t++) sim.step();
     CHECK(sim.w.units[b].dead + sim.w.units[b].wounded == 0, "240 m 外强弩不及");
     sim.issue(b, {O_MOVE, 500, 620}, true);
-    for (int t = 0; t < 1500; t++) sim.step();
+    for (int t = 0; t < 2100; t++) sim.step();
     int hurt = sim.w.units[b].dead + sim.w.units[b].wounded;
-    printf("   强弩 500 张对 120 m 处戟兵 90 s：亡伤 %d\n", hurt);
+    printf("   强弩 500 张对 120 m 处戟兵 210 s：亡伤 %d\n", hurt);
     CHECK(hurt > 40, "进入射程后强弩有杀伤");
   }
   // 5. 界桥 AI 对 AI 能分胜负，伤亡量级合史
@@ -267,6 +267,91 @@ int main() {
     const Unit& X = s2.w.units[x]; const Unit& G = s2.w.units[g];
     printf("   弓弩自保：敌步兵到 %.0f，弩手 y=%.0f（步兵 y=%.0f），弩手亡伤 %d\n", s2.w.units[e].cy, X.cy, G.cy, X.dead + X.wounded);
     CHECK(X.cy < G.cy && X.dead + X.wounded < 30, "弩手退到步兵身后且几乎无损");
+  }
+  // 16. 骑兵波次（《六韬·均兵》）：依次冲击、同一时刻至多一道冲击波在场、回旋归位；接战过的骑兵与杀伤都多于整块冲击；预备队待敌动摇才出
+  {
+    auto run = [](uint8_t form, int& touchedOut, int& hurt, int& launches, int& maxAttacking, bool& reserveIdleWhileSteady) {
+      Sim sim(4, 1);
+      UnitSpec inf{"刀盾", K_SWORD, 600}; inf.files = 60; inf.armorPct[0] = 60; inf.armorPct[1] = 30; inf.armorPct[2] = 10;
+      UnitSpec cav{"突骑", K_CAV, 300}; cav.files = 30; cav.elite = true; cav.formation = form;
+      int a = addUnit(sim, 0, inf, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, cav, 750, 500, -1, 0, 0); sim.finalize();
+      sim.issue(b, {O_CHARGE, 500, 500, a}, true);
+      std::vector<uint8_t> touched(sim.w.s.size(), 0); maxAttacking = 0; reserveIdleWhileSteady = true;
+      for (int t = 0; t < 1800; t++) {
+        sim.step(); const Unit& C = sim.w.units[b];
+        for (int id : C.members) if (sim.engaged[id] == 1) touched[id] = 1;
+        if (C.nWaves) { int at = 0; for (int k = 0; k < C.nWaves; k++) if (C.wavePhase[k] == WP_ATTACK) at++; maxAttacking = std::max(maxAttacking, at);
+          const Unit& I = sim.w.units[a]; if (C.wavePhase[C.nWaves] == WP_ATTACK && I.cohesion > 0.6f && I.routed * 4 < I.alive) reserveIdleWhileSteady = false; }
+      }
+      touchedOut = 0; for (uint8_t v : touched) touchedOut += v;
+      const Unit& I = sim.w.units[a]; hurt = I.dead + I.wounded + I.captured + I.routed; launches = sim.w.units[b].cycles;
+    };
+    int tW, hW, lW, mW, tB, hB, lB, mB; bool rW, rB;
+    run(F_WAVE, tW, hW, lW, mW, rW); run(F_SQUARE, tB, hB, lB, mB, rB);
+    printf("   3 分钟侧冲刀盾：波次 发%d波、接战过 %d 骑、敌损 %d；整块 %d 轮、接战过 %d 骑、敌损 %d\n", lW, tW, hW, lB, tB, hB);
+    CHECK(lW >= 6, "波次三分钟内至少发六波");
+    CHECK(mW <= 1, "同一时刻至多一道冲击波在场（其余在列待发）");
+    CHECK(tW > tB * 1.4, "接战过的骑兵明显多于整块冲击（后排不再白站）");
+    CHECK(hW > hB, "波次杀伤多于整块冲击");
+    CHECK(rW, "敌阵未动摇时预备队不出");
+  }
+  // 17. 弩不能隔友军平射；弓可抛射越过（命中打折）
+  {
+    auto shoot = [](uint8_t kind, bool friendInFront) {
+      Sim sim(18, 1);
+      UnitSpec xb{"射", kind, 600}; xb.formation = F_LINE; xb.files = 200;
+      UnitSpec inf{"戟", K_HALBERD, 600}; inf.files = 120;
+      int a = addUnit(sim, 0, xb, 500, 480, 0, 1, 0);
+      if (friendInFront) addUnit(sim, 0, inf, 500, 520, 0, 1, 1);
+      addUnit(sim, 1, inf, 500, 570, 0, -1, 0); sim.finalize();
+      int hits = 0, prevLeft = 0;   // 计命中次数（敌溃后目标变少，伤亡数不好比）
+      for (int t = 0; t < 600; t++) { sim.step(); const Unit& X = sim.w.units[a]; if (prevLeft == 1 && X.volleyLeft == 0) hits += X.volleyHits; prevLeft = X.volleyLeft; }
+      return hits;
+    };
+    int xo = shoot(K_XBOW, false), xf = shoot(K_XBOW, true), bo = shoot(K_BOW, false), bf = shoot(K_BOW, true);
+    printf("   隔友军射击 60 s 命中：弩 无遮 %d / 有遮 %d；弓 无遮 %d / 有遮 %d\n", xo, xf, bo, bf);
+    CHECK(xo > 30 && xf == 0, "弩隔着本方步兵射不出去");
+    CHECK(bf > 10 && bf < bo * 0.85f, "弓可抛射越过本方步兵，但命中打折");
+  }
+  // 18. 长短兵混编：前 longRanks 排为长兵、其后为刀盾；后排刀盾带盾
+  {
+    Sim sim(19, 1); UnitSpec sp{"曲", K_HALBERD, 200}; sp.files = 20; sp.rearKind = K_SWORD;
+    int a = addUnit(sim, 0, sp, 500, 500, 0, 1, 0); sim.finalize();
+    int front = 0, rear = 0, shield = 0; const Unit& U = sim.w.units[a];
+    for (size_t k = 0; k < U.members.size(); k++) { int id = U.members[k]; bool fr = U.slotY[k] > U.frontY - 3 * sim.w.P.rankGap + 0.1f; if (fr && sim.w.s.kind[id] == K_HALBERD) front++; if (!fr && sim.w.s.kind[id] == K_SWORD) { rear++; if (sim.w.s.flags[id] & 1) shield++; } }
+    printf("   混编：前三排戟 %d / 60，后排刀盾 %d / 140（带盾 %d）\n", front, rear, shield);
+    CHECK(front == 60 && rear == 140 && shield == 140, "长兵在前、短兵在后");
+  }
+  // 19. 箭矢有限：矢尽停射并记事；弩分两番迭射（每轮只有一半人射）
+  {
+    Sim sim(20, 1); sim.w.P.xbowAmmo = 3;
+    UnitSpec xb{"弩", K_XBOW, 300}; xb.formation = F_LINE; xb.files = 100;
+    UnitSpec inf{"戟", K_HALBERD, 600}; inf.files = 60;
+    int a = addUnit(sim, 0, xb, 500, 480, 0, 1, 0); addUnit(sim, 1, inf, 500, 580, 0, -1, 0); sim.finalize();
+    sim.w.units[a].ammo = 3;
+    int maxShots = 0, volleys = 0; bool logged = false;
+    for (int t = 0; t < 1200; t++) { sim.step(); const Unit& X = sim.w.units[a]; if (X.volleyLeft == 0 && X.volleyShots > 0) { maxShots = std::max(maxShots, X.volleyShots); } if (X.volleyLeft == 9) volleys++; }
+    for (auto& e : sim.w.events) if (e.text.find("矢尽") != std::string::npos) logged = true;
+    printf("   矢 3 轮：发 %d 番、每番最多 %d 人，矢尽记事 %s，剩 %.1f\n", volleys, maxShots, logged ? "有" : "无", sim.w.units[a].ammo);
+    CHECK(volleys == 6 && logged && sim.w.units[a].outOfAmmo, "三轮矢（六番迭射）后矢尽停射");
+    CHECK(maxShots <= 160, "迭射每番只有约一半人射");
+  }
+  // 20. 主将有麾下亲兵；车营挡骑
+  {
+    const ScenarioDef* jq = nullptr; const ScenarioDef* mb = nullptr; for (auto& s : scenarios()) { if (s.id == "jieqiao") jq = &s; if (s.id == "mobei") mb = &s; }
+    ScenarioDef d = *jq; d.aiSide[0] = d.aiSide[1] = true;
+    Sim sim(21, 0); loadScenario(sim, d);
+    int g = sim.w.sides[0].generalUnit; const Unit& G = sim.w.units[g];
+    int qu = 0; for (auto& u : sim.w.units) if (u.side == 0) qu++;
+    printf("   界桥袁军：%d 曲；主将在「%s」（%zu 人，麾下 %s）\n", qu, G.name.c_str(), G.members.size(), G.guard ? "是" : "否");
+    CHECK(G.guard && G.members.size() == (size_t)sim.w.P.guardMen, "主将在麾下亲兵中");
+    CHECK(qu >= 30, "按约 200 人一曲编成");
+    ScenarioDef m = *mb; m.aiSide[0] = m.aiSide[1] = true;
+    Sim s2(22, 0); loadScenario(s2, m);
+    int inside = 0;
+    for (int t = 0; t < 2400; t++) { for (int sd = 0; sd < 2; sd++) aiStep(s2, sd); s2.step(); if (t % 50 == 0) for (size_t i = 0; i < s2.w.s.size(); i++) { if (s2.w.s.side[i] != 1 || !kindIsCav(s2.w.s.kind[i]) || s2.w.s.state[i] >= S_WOUNDED) continue; float dx = s2.w.s.x[i] - 1500.f, dy = s2.w.s.y[i] - 1200.f; if (dx * dx + dy * dy < 120.f * 120.f) inside++; } }
+    printf("   漠北 4 分钟：匈奴骑进入车营内的人次 %d；汉 亡伤 %d，匈奴 亡伤 %d\n", inside, s2.w.sides[0].dead + s2.w.sides[0].wounded, s2.w.sides[1].dead + s2.w.sides[1].wounded);
+    CHECK(inside == 0, "匈奴骑兵进不了武刚车营");
   }
   printf(fails ? "\n%d 项失败\n" : "\n全部通过\n", fails);
   return fails ? 1 : 0;

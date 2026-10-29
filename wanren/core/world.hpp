@@ -18,14 +18,15 @@ inline const char* kindName(uint8_t k) {
 }
 
 enum State : uint8_t { S_FORMED, S_ROUT, S_RALLY, S_WOUNDED, S_DEAD, S_CAPTURED };   // >= S_WOUNDED 即退出战斗
-enum Formation : uint8_t { F_SQUARE, F_DENSE, F_LOOSE, F_CIRCLE, F_WEDGE, F_GOOSE, F_LINE, F_COLUMN, F_COUNT };
+enum Formation : uint8_t { F_SQUARE, F_DENSE, F_LOOSE, F_CIRCLE, F_WEDGE, F_GOOSE, F_LINE, F_COLUMN, F_WAVE, F_COUNT };   // F_WAVE：骑兵波次（《六韬·均兵》）
 inline const char* formationName(uint8_t f) {
-  static const char* n[] = {"方阵", "数阵", "疏阵", "圆阵", "锥形", "雁行", "横列", "纵队"};
+  static const char* n[] = {"方阵", "数阵", "疏阵", "圆阵", "锥形", "雁行", "横列", "纵队", "波次"};
   return f < F_COUNT ? n[f] : "?";
 }
 enum Stance : uint8_t { ST_HOLD, ST_MOVE, ST_CHARGE, ST_RETREAT, ST_PRONE, ST_TURN, ST_DISENGAGE };  // 伏盾 = ST_PRONE；ST_TURN = 原地轮转；ST_DISENGAGE = 骑兵脱离（不接战，疾驰回整队点）
-enum CavPhase : uint8_t { CP_NONE, CP_CHARGE, CP_MELEE, CP_DISENGAGE, CP_REFORM, CP_PURSUE, CP_SWEEP, CP_SWING };
-inline const char* cavPhaseName(uint8_t p) { static const char* n[] = {"", "冲击", "接战", "脱离", "整队", "追击", "游射", "回旋"}; return p < 8 ? n[p] : ""; }
+enum CavPhase : uint8_t { CP_NONE, CP_CHARGE, CP_MELEE, CP_DISENGAGE, CP_REFORM, CP_PURSUE, CP_SWEEP, CP_SWING, CP_WAVES };
+inline const char* cavPhaseName(uint8_t p) { static const char* n[] = {"", "冲击", "接战", "脱离", "整队", "追击", "游射", "回旋", "轮冲"}; return p < 9 ? n[p] : ""; }
+enum WavePhase : uint8_t { WP_READY, WP_ATTACK, WP_RETURN };
 enum OrderType : uint8_t { O_MOVE, O_HALT, O_CHARGE, O_RETREAT, O_FIRE, O_FORMATION, O_FACE, O_PRONE, O_RISE, O_ATTACK };   // O_ATTACK：步兵行进到敌曲 45 m 再冲（省疲劳）
 
 struct Order {
@@ -49,6 +50,12 @@ struct Unit {
   float frontY = 0.f;                               // 前排槽位的 y（算排数用）
   uint8_t cavPhase = CP_NONE; float cavTimer = 0;   // 骑兵用法状态机
   int cavTarget = -1; float rallyX = 0, rallyY = 0; int sweepSign = 1; int cycles = 0;
+  // 波次（F_WAVE）：nWaves 道冲击波 + 1 道预备队（id = nWaves）。slotY 是波内的局部 y，waveY[w] 是该波当前在本曲坐标里的 y
+  int nWaves = 0; std::vector<uint8_t> slotWave; std::vector<float> waveY, waveBase, waveTimer, waveContact;
+  std::vector<uint8_t> wavePhase; std::vector<int> waveQueue;   // waveQueue：在列待发的波，前者在前
+  float waveLaunchTimer = 0; bool reserveCommitted = false; bool giveUp = false;
+  float ammo = 0; bool outOfAmmo = false; int volleyGroup = 0;   // 远程：剩余矢（按人计的齐射数）；弩分两番迭射
+  uint8_t rearKind = 255; bool guard = false;                    // 混编时后排兵种；主将麾下
   uint8_t stance = ST_HOLD;
   int fireTarget = -1;                              // 射击目标曲
   float reload = 0;                                 // 齐射计时（秒）

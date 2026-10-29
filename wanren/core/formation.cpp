@@ -2,9 +2,35 @@
 #include <cmath>
 #include <algorithm>
 
+// 骑兵波次：nW 道浅波 + 预备队，波距二十步；波内 waveRanks 排
+static void buildWaveSlots(Unit& u, const Params& P) {
+  int n = (int)u.members.size();
+  int nW = std::max(1, P.waveCount); int nRes = (int)std::lround(n * P.reserveFrac); if (n < 40) nRes = 0;
+  int nAtt = n - nRes, per = (nAtt + nW - 1) / nW;
+  u.nWaves = nW; u.slotWave.assign(n, 0);
+  int ranks = std::max(1, P.waveRanks);
+  auto layout = [&](int first, int cnt, int w) {
+    int files = std::max(1, (cnt + ranks - 1) / ranks);
+    for (int k = 0; k < cnt; k++) { int i = first + k; int r = k / files, c = k % files; int rowN = std::min(files, cnt - r * files); u.slotX[i] = (c - (rowN - 1) * 0.5f) * P.waveFileGap; u.slotY[i] = -r * P.waveRankGap; u.slotWave[i] = (uint8_t)w; }
+  };
+  int placed = 0;
+  for (int w = 0; w < nW; w++) { int cnt = std::min(per, nAtt - placed); if (cnt <= 0) cnt = 0; layout(placed, cnt, w); placed += cnt; }
+  layout(placed, n - placed, nW);
+  // 基准位置：第 p 位在 y = -p·波距，预备队再退 reserveGap；整体居中
+  float depth = (nW - 1) * P.waveGap + P.waveGap + P.reserveGap;
+  u.waveBase.assign(nW + 1, 0.f); for (int p = 0; p < nW; p++) u.waveBase[p] = depth * 0.5f - p * P.waveGap; u.waveBase[nW] = depth * 0.5f - depth;
+  u.waveY.assign(nW + 1, 0.f); u.wavePhase.assign(nW + 1, WP_READY); u.waveTimer.assign(nW + 1, 0.f); u.waveContact.assign(nW + 1, -1.f);
+  u.waveQueue.clear(); for (int w = 0; w < nW; w++) { u.waveQueue.push_back(w); u.waveY[w] = u.waveBase[w]; }
+  u.waveY[nW] = u.waveBase[nW]; u.reserveCommitted = false; u.waveLaunchTimer = 0;
+  float hx = 2.f; for (int i = 0; i < n; i++) hx = std::max(hx, fabsf(u.slotX[i]));
+  u.hx = hx; u.hy = depth * 0.5f; u.halfWidth = std::max(hx, u.hy); u.frontY = u.waveBase[0];
+}
+
 void buildSlots(Unit& u, const Params& P) {
   int n = (int)u.members.size();
   u.slotX.assign(n, 0); u.slotY.assign(n, 0);
+  if (u.formation == F_WAVE) { buildWaveSlots(u, P); return; }
+  u.nWaves = 0; u.slotWave.clear(); u.waveY.clear(); u.waveBase.clear(); u.wavePhase.clear(); u.waveQueue.clear();
   bool cav = kindIsCav(u.kind);
   float fg = cav ? P.cavFileGap : P.fileGap, rg = cav ? P.cavRankGap : P.rankGap;
   int files = std::max(1, u.files);

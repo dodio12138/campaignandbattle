@@ -5,8 +5,8 @@
 #include <cmath>
 #include <algorithm>
 
-enum TerrainType : uint8_t { T_OPEN, T_FOREST, T_WATER, T_FORD, T_MARSH, T_COUNT };
-inline const char* terrainName(uint8_t t) { static const char* n[] = {"旷野", "林", "水", "渡口", "沼泽"}; return t < T_COUNT ? n[t] : "?"; }
+enum TerrainType : uint8_t { T_OPEN, T_FOREST, T_WATER, T_FORD, T_MARSH, T_STOCKADE, T_COUNT };   // T_STOCKADE：车营 / 营垒（武刚车自环为营）
+inline const char* terrainName(uint8_t t) { static const char* n[] = {"旷野", "林", "水", "渡口", "沼泽", "车营"}; return t < T_COUNT ? n[t] : "?"; }
 
 struct Terrain {
   float cell = 10.f; int w = 1, h = 1; float worldW = 3000, worldH = 3000;
@@ -27,8 +27,10 @@ struct Terrain {
   inline float heightAt(float x, float y) const { return height[(size_t)iy(y) * w + ix(x)]; }
   inline uint8_t typeAt(float x, float y) const { return type[(size_t)iy(y) * w + ix(x)]; }
   inline bool blocked(float x, float y) const { return typeAt(x, y) == T_WATER; }
+  inline bool blockedFor(float x, float y, bool cav) const { uint8_t t = typeAt(x, y); return t == T_WATER || (cav && t == T_STOCKADE); }   // 马不能越车营
+  void ring(float cx, float cy, float r, uint8_t t) { for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) { float dx = (i + 0.5f) * cell - cx, dy = (j + 0.5f) * cell - cy, d = sqrtf(dx * dx + dy * dy); if (fabsf(d - r) < cell * 0.6f) type[(size_t)j * w + i] = t; } }
   // 速度倍率（类型）
-  static inline float speedMul(uint8_t t) { switch (t) { case T_FOREST: return 0.6f; case T_FORD: return 0.4f; case T_MARSH: return 0.5f; case T_WATER: return 0.f; default: return 1.f; } }
+  static inline float speedMul(uint8_t t) { switch (t) { case T_FOREST: return 0.6f; case T_FORD: return 0.4f; case T_MARSH: return 0.5f; case T_STOCKADE: return 0.3f; case T_WATER: return 0.f; default: return 1.f; } }
   // 沿方向 (dx,dy)（单位向量）的坡度：每米升高米数
   inline float slope(float x, float y, float dx, float dy) const { float h0 = heightAt(x, y), h1 = heightAt(x + dx * cell, y + dy * cell); return (h1 - h0) / cell; }
   // —— 生成 ——

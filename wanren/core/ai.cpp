@@ -23,6 +23,12 @@ void aiStep(Sim& sim, int side) {
     int e = sim.nearestEnemyUnit(u.id, 1e9f); if (e < 0) continue;
     const Unit& E = w.units[e]; float d = hypotf(E.cx - u.cx, E.cy - u.cy);
     bool engaged = w.tick - u.lastEngagedTick < 30;
+    if (u.guard) {   // 麾下：随全军重心之后 100 m，不主动接战
+      float gx = mcx - adx * 100.f, gy = mcy - ady * 100.f;
+      if (!engaged && hypotf(gx - u.cx, gy - u.cy) > 30.f && u.stance == ST_HOLD) sim.issue(u.id, {O_MOVE, gx, gy});
+      continue;
+    }
+    if (kindIsMissile(u.kind) && u.outOfAmmo) continue;   // 矢尽者由核心自退到步兵身后
     if (kindIsMissile(u.kind) && !kindIsCav(u.kind)) {
       float range = u.kind == K_HXBOW ? P.hxbowRange : u.kind == K_XBOW ? P.xbowRange : P.bowRange;
       // 护弩：敌骑逼近（120 m 内且正向我来）→ 最近的本方步兵曲扑上拦截，弩手退到它身后
