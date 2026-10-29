@@ -123,7 +123,10 @@ struct Params {
   // —— 溃兵传染方向性 ——
   float routNearPerTick = 1.5f;    // 每个从身边（4 m 内）跑过的本方溃兵每 tick 扣（不打未接敌折扣：人是真从阵里穿过去的）
   int routNearCap = 5;
-  float officerSuppress = 0.5f;    // 军候在侧且旗立，传染减半
+  float officerSuppress = 0.5f;
+  float trampleShaky = 0.5f;
+  float ambushShock = 7.f;         // 伏兵俱起：80 m 内敌军一次惊扰（扬尘大叫）；扫过 0 / 4 / 5 / 7 / 9，取 7
+  float ambushShockCav = 1.5f;     // 冲来的骑兵马惊，倍率       // 溃骑冲过本阵时，传染按至少「半动摇」计    // 军候在侧且旗立，传染减半
   // —— 追击与俘降 ——
   float captureProb = 0.6f;        // 溃兵被近战追上倒地时成为俘虏的比例（其余阵亡 / 伤）
   // —— 让路 ——

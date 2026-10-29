@@ -14,7 +14,8 @@ struct UnitSpec {
   bool split = true;                // 超过 300 人按 200 人一曲拆开，同部并列
 };
 struct TerrainFeature { enum Kind { HILL, RIDGE, FOREST, MARSH, RIVER, STOCKADE_RING } kind; float x0 = 0, y0 = 0, x1 = 0, y1 = 0, r = 0, h = 0; std::vector<float> fords; };   // 坐标相对战场中心（x 右，y 向 0 方的前方）
-struct ScenarioDef { std::string id, title, note; std::vector<UnitSpec> armies[2]; std::string sideName[2]; bool aiSide[2] = {false, true}; std::vector<TerrainFeature> terrain; };
+struct GeneralDef { int command = 70, intellect = 60; uint8_t trait = 0, posture = 0; };
+struct ScenarioDef { std::string id, title, note; std::vector<UnitSpec> armies[2]; std::string sideName[2]; bool aiSide[2] = {false, true}; std::vector<TerrainFeature> terrain; GeneralDef gen[2]; };
 
 const std::vector<ScenarioDef>& scenarios();
 // 把剧本装进 sim（两军相向，相距 dist 米）

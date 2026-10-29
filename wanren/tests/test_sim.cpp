@@ -353,6 +353,25 @@ int main() {
     printf("   漠北 4 分钟：匈奴骑进入车营内的人次 %d；汉 亡伤 %d，匈奴 亡伤 %d\n", inside, s2.w.sides[0].dead + s2.w.sides[0].wounded, s2.w.sides[1].dead + s2.w.sides[1].wounded);
     CHECK(inside == 0, "匈奴骑兵进不了武刚车营");
   }
+  // 21. 主帅：骄将看得见伏兵、以为兵少而冲之；智将识破伏兵、不往伏处撞；守势一方不出阵
+  {
+    auto firstTargetProne = [](int intellect, uint8_t trait) {
+      const ScenarioDef* jq = nullptr; for (auto& s : scenarios()) if (s.id == "jieqiao") jq = &s;
+      ScenarioDef d = *jq; d.aiSide[0] = d.aiSide[1] = true; d.gen[1].intellect = intellect; d.gen[1].trait = trait;
+      Sim sim(23, 0); loadScenario(sim, d);
+      int proneHits = 0, homeDrift = 0;
+      for (int t = 0; t < 700; t++) {
+        for (int sd = 0; sd < 2; sd++) aiStep(sim, sd); sim.step();
+        for (auto& u : sim.w.units) if (u.side == 1 && kindIsCav(u.kind) && u.kind != K_CAV_BOW && u.cavTarget >= 0 && sim.w.units[u.cavTarget].stance == ST_PRONE) proneHits++;
+      }
+      for (auto& u : sim.w.units) if (u.side == 0 && !kindIsCav(u.kind) && !u.guard && hypotf(u.cx - u.homeX, u.cy - u.homeY) > 40.f && sim.w.tick - u.lastEngagedTick > 50) homeDrift++;
+      return std::make_pair(proneHits, homeDrift);
+    };
+    auto rash = firstTargetProne(50, 1), wise = firstTargetProne(85, 0);
+    printf("   界桥 70 s：骄将（智略 50）以伏兵为目标 %d 次，智将（智略 85）%d 次；守势袁军未接战而离原位的曲 %d\n", rash.first, wise.first, rash.second);
+    CHECK(rash.first > 0 && wise.first == 0, "骄将冲伏兵，智将识破");
+    CHECK(rash.second == 0, "守势一方未接战时不离阵地");
+  }
   printf(fails ? "\n%d 项失败\n" : "\n全部通过\n", fails);
   return fails ? 1 : 0;
 }

@@ -54,6 +54,7 @@ struct Unit {
   int nWaves = 0; std::vector<uint8_t> slotWave; std::vector<float> waveY, waveBase, waveTimer, waveContact;
   std::vector<uint8_t> wavePhase; std::vector<int> waveQueue;   // waveQueue：在列待发的波，前者在前
   float waveLaunchTimer = 0; bool reserveCommitted = false; bool giveUp = false;
+  float homeX = 0, homeY = 0;                       // 开局位置（守势时回此）
   float ammo = 0; bool outOfAmmo = false; int volleyGroup = 0;   // 远程：剩余矢（按人计的齐射数）；弩分两番迭射
   uint8_t rearKind = 255; bool guard = false;                    // 混编时后排兵种；主将麾下
   uint8_t stance = ST_HOLD;
@@ -89,6 +90,10 @@ struct Side {
   float gx = 0, gy = 0;             // 主将位置（令由此发）
   bool ai = false;                  // 是否由 AI 指挥
   float aiTimer = 0;
+  // 主帅：统帅（决断快慢）、智略（识破伏兵、判断虚实）、性格、姿态
+  int command = 70, intellect = 60; uint8_t trait = 0;   // trait: 0 均衡 1 骄（轻敌躁进，见少则陵） 2 谨慎（守而待敌乱）
+  uint8_t posture = 0; bool counter = false;            // posture: 0 攻 1 守待敌乱；counter = 已转入反击
+  float ax = 0, ay = 0;                                 // 本方阵地锚点（开局重心）
 };
 
 struct Soldiers {

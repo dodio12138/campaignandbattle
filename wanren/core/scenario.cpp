@@ -50,6 +50,8 @@ static ScenarioDef jieqiao() {
   for (int i = 0; i < 6; i++) { UnitSpec u{bn[i], (i % 3 == 2) ? K_SWORD : K_HALBERD, 1500, false, false, false, {55, 35, 10}, F_SQUARE, 60}; if (u.kind == K_HALBERD) u.rearKind = K_SWORD; u.ox = (i % 2 ? 70.f : -70.f); u.oy = -(i / 2) * 60.f; if (i == 3) u.general = true; B.push_back(u); }
   B.push_back({"弓弩", K_XBOW, 800, false, false, false, {50, 40, 10}, F_LINE, 80, 0, -200});
   // 磐河自北向南在战场东侧流过，界桥（渡口）在两军之间偏东；西侧略有起伏
+  // 主帅：袁军前敌实为麹义（「久在凉州，晓习羌斗」），守而待敌乱；公孙瓒「见其兵少，便放骑欲陵蹈之」——骄
+  s.gen[0] = {80, 75, 2, 1}; s.gen[1] = {80, 50, 1, 0};
   s.terrain.push_back({TerrainFeature::RIVER, 420, -900, 380, 900, 28, 0, {0.5f}});
   s.terrain.push_back({TerrainFeature::HILL, -350, 150, 0, 0, 220, 8});
   s.terrain.push_back({TerrainFeature::FOREST, -520, -200, 0, 0, 120, 0});
@@ -84,10 +86,12 @@ static ScenarioDef mobei() {
   s.sideName[0] = "卫青"; s.sideName[1] = "单于";
   auto& A = s.armies[0];
   A.push_back({"强弩前", K_HXBOW, 400, true, false, false, {20, 60, 20}, F_LINE, 60, 0, 90});
-  A.push_back({"强弩后", K_XBOW, 400, false, false, false, {30, 50, 20}, F_LINE, 60, 0, -90});
+  A.push_back({"强弩左", K_XBOW, 200, false, false, false, {30, 50, 20}, F_LINE, 60, -80, 30});
+  A.push_back({"强弩右", K_XBOW, 200, false, false, false, {30, 50, 20}, F_LINE, 60, 80, 30});
   { UnitSpec u{"戟士", K_HALBERD, 800, false, false, false, {30, 50, 20}, F_SQUARE, 40, 0, 20}; u.rearKind = K_SWORD; u.general = true; A.push_back(u); }
-  A.push_back({"汉骑", K_CAV, 1600, true, false, false, {20, 60, 20}, F_WAVE, 40, 0, 240});
-  s.terrain.push_back({TerrainFeature::STOCKADE_RING, 0, -300, 0, 0, 135, 0});   // 车营：以甲方锚点为心，半径 135 m
+  A.push_back({"汉骑", K_CAV, 1600, true, false, false, {20, 60, 20}, F_WAVE, 40, 260, 20});   // 在营东侧，不挡营内弩的射线
+  s.terrain.push_back({TerrainFeature::STOCKADE_RING, 0, -300, 0, 0, 135, 0});
+  s.gen[0] = {90, 85, 2, 1}; s.gen[1] = {75, 55, 1, 0};   // 卫青持重；单于见汉兵少而轻进   // 车营：以甲方锚点为心，半径 135 m
   auto& B = s.armies[1];
   B.push_back({"左贤骑射", K_CAV_BOW, 800, false, false, false, {60, 35, 5}, F_LOOSE, 25, -250, 0});
   B.push_back({"右贤骑射", K_CAV_BOW, 800, false, false, false, {60, 35, 5}, F_LOOSE, 25, 250, 0});
@@ -121,6 +125,7 @@ void loadScenario(Sim& sim, const ScenarioDef& sc, float dist, float scale) {
   }
   for (int sd = 0; sd < 2; sd++) {
     w.sides[sd].name = sc.sideName[sd]; w.sides[sd].ai = sc.aiSide[sd];
+    w.sides[sd].command = sc.gen[sd].command; w.sides[sd].intellect = sc.gen[sd].intellect; w.sides[sd].trait = sc.gen[sd].trait; w.sides[sd].posture = sc.gen[sd].posture; w.sides[sd].counter = false;
     float fy = sd == 0 ? 1.f : -1.f;           // 0 方朝北（+y），1 方朝南
     float ay = cy - fy * dist * 0.5f;
     const Params& P = w.P;

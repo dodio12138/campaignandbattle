@@ -37,8 +37,9 @@ void Sim::finalize() {
       u.flag = u.members[fl]; w.s.flags[u.flag] |= 4;
     }
     for (int i = 0; i < n; i++) { float wx, wy; slotWorld(u, i, wx, wy); int id = u.members[i]; w.s.x[id] = wx; w.s.y[id] = wy; }
-    u.gx = u.cx; u.gy = u.cy;
+    u.gx = u.cx; u.gy = u.cy; u.homeX = u.cx; u.homeY = u.cy;
   }
+  for (int sd = 0; sd < 2; sd++) { auto& S = w.sides[sd]; double sx = 0, sy = 0; int nm = 0; for (auto& u : w.units) if (u.side == sd) { sx += u.cx * u.members.size(); sy += u.cy * u.members.size(); nm += (int)u.members.size(); } if (nm) { S.ax = (float)(sx / nm); S.ay = (float)(sy / nm); } }
   for (int sd = 0; sd < 2; sd++) { auto& S = w.sides[sd]; S.total = 0; for (size_t i = 0; i < w.s.size(); i++) if (w.s.side[i] == sd) S.total++; if (S.general >= 0) { S.gx = w.s.x[S.general]; S.gy = w.s.y[S.general]; } }
   size_t n = w.s.size(), U = w.units.size();
   nx = w.s.x; ny = w.s.y; engaged.assign(n, 0);
@@ -139,7 +140,7 @@ bool Sim::waveBrain(Unit& u, const Unit& T, float ux, float uy, float d, bool ta
   // CP_WAVES
   if (targetBroken) { resetWaves(u); u.cavPhase = CP_PURSUE; u.cavTimer = 0; u.freeMove = false; return false; }
   if (exhausted) { startDisengage(u, -ux, -uy); return true; }
-  if (u.cycles >= 3 * nW && T.cohesion > 0.8f && T.routed * 10 < T.alive) {   // 轮冲三遍敌阵不动：撤出，另择目标（不硬耗）
+  if (w.sides[u.side].trait != 1 && u.cycles >= 3 * nW && T.cohesion > 0.8f && T.routed * 10 < T.alive) {   // 骄将不肯引去   // 轮冲三遍敌阵不动：撤出，另择目标（不硬耗）
     startDisengage(u, -ux, -uy); u.giveUp = true; log(u.name + "三冲不动，引去"); return true;
   }
   float attackY = u.waveBase[0] + std::max(0.f, gapE) + 10.f;
@@ -170,7 +171,8 @@ bool Sim::waveBrain(Unit& u, const Unit& T, float ux, float uy, float d, bool ta
   for (size_t q = 0; q < u.waveQueue.size(); q++) u.waveY[u.waveQueue[q]] = u.waveBase[q];   // 在列各波依次补位
   if (u.wavePhase[nW] != WP_ATTACK) u.waveY[nW] = u.waveBase[nW];
   // 预备队：敌阵动摇（凝聚 < 0.4 或溃者过四分之一）乘隙突入
-  if (!u.reserveCommitted && u.wavePhase[nW] == WP_READY && (T.cohesion < 0.4f || T.routed * 4 > T.alive + T.routed)) {
+  bool shaken = (T.formation != F_WAVE && T.cohesion < 0.4f) || T.routed * 4 > T.alive + T.routed || T.moraleAvg < 40.f;   // 波次骑兵出击时凝聚本就低，不算动摇
+  if (!u.reserveCommitted && u.wavePhase[nW] == WP_READY && shaken) {
     u.reserveCommitted = true; u.wavePhase[nW] = WP_ATTACK; u.waveTimer[nW] = 0; u.waveContact[nW] = -1;
     for (size_t mi = 0; mi < u.members.size(); mi++) if (u.slotWave[mi] == nW && s.state[u.members[mi]] == S_FORMED) s.morale[u.members[mi]] = std::min(100.f, s.morale[u.members[mi]] + P.mCharge);
     log(u.name + "预备队乘隙突入");
@@ -393,6 +395,13 @@ void Sim::updateUnitsPre() {
         for (int id : u.members) if (w.s.state[id] == S_FORMED) w.s.morale[id] = std::min(100.f, w.s.morale[id] + P.mCharge);
         for (auto& v : w.units) if (v.side == u.side && v.part == u.part && kindIsMissile(v.kind)) v.reload = 0;   // 强弩雷发
         log(u.name + "伏盾下不动，敌至数十步，同时俱起，扬尘大叫，直前冲突");
+        // 惊扰：80 m 内敌军士气一挫，正冲来的骑兵马惊更甚
+        for (auto& v : w.units) {
+          if (v.side == u.side || v.alive == 0) continue;
+          float dd = len(v.cx - u.cx, v.cy - u.cy) - v.halfWidth - u.hx; if (dd > 80.f) continue;
+          float shock = P.ambushShock * (kindIsCav(v.kind) ? P.ambushShockCav : 1.f);
+          for (int id : v.members) if (w.s.state[id] == S_FORMED) w.s.morale[id] -= shock;
+        }
       }
     }
   }
@@ -421,7 +430,7 @@ void Sim::soldierBlock(int block) {
     }
     float searchR = chargingU ? 8.f : 4.f;
     float sepx = 0, sepy = 0; const Packed* nearest = nullptr; float nd = 1e9f;
-    float fleex = 0, fleey = 0; int enemyNear = 0, friend3 = 0, enemy3 = 0, routNear = 0;
+    float fleex = 0, fleey = 0; int enemyNear = 0, friend3 = 0, enemy3 = 0, routNear = 0, routCav = 0;
     uint8_t mySide = s.side[i];
     const float sepR2 = P.sepRadius * P.sepRadius;
     // 无事者快路径：3×3 格内无敌、无本方溃兵，且本曲不乱 → 不扫邻居（只追槽位，省掉分离力；4 m 搜索半径下 3×3 格已覆盖）
@@ -438,11 +447,11 @@ void Sim::soldierBlock(int block) {
         if (d2 < 9.f && p.state != S_ROUT) enemy3++;
       } else {
         if (d2 < 9.f && p.state == S_FORMED) friend3++;
-        if (d2 < 16.f && p.state == S_ROUT) routNear++;
+        if (d2 < 16.f && p.state == S_ROUT) { routNear++; if (kindIsCav(s.kind[p.idx])) routCav = 1; }
       }
       if (d2 < sepR2 && d2 > 1e-6f) { float d = sqrtf(d2); float f = (P.sepRadius - d) / P.sepRadius; sepx -= dx / d * f; sepy -= dy / d * f; }
     });
-    s.routNear[i] = (uint8_t)std::min(routNear, 255); s.push[i] = 0;
+    s.routNear[i] = (uint8_t)(std::min(routNear, 63) | (routCav ? 64 : 0)); s.push[i] = 0;   // bit6：有溃骑从身边冲过
     float ndist = nearest ? sqrtf(nd) : 1e9f;
     const UnitSpeed& us = unitSpeed[s.unit[i]];
     const Terrain& T = w.terrain; bool flatT = T.flatAt(px, py); uint8_t tt = flatT ? (uint8_t)T_OPEN : T.typeAt(px, py);
@@ -699,7 +708,7 @@ void Sim::moraleBlock(int block) {
     int c = grid.cellOf[i];
     if (c >= 0 && s.state[i] != S_ROUT) {
       int d = grid.deaths[sd][c], r = grid.routs[sd][c];   // 只看同格：看得见的才吓人（深阵不因此比横列更脆）
-      int rn = s.routNear[i];
+      int rn = s.routNear[i] & 63; bool trampled = (s.routNear[i] & 64) != 0;
       if (d | r | rn) {
         float scale = (w.tick - u.lastEngagedTick < 50 ? 1.f : P.contagionIdle) * (1.f - P.contagionCohesion * u.cohesion);
         if (u.officerAlive && u.flagAlive) { float ox = s.x[u.officer] - s.x[i], oy = s.y[u.officer] - s.y[i]; if (ox * ox + oy * oy < P.officerRadius * P.officerRadius) scale *= P.officerSuppress; }   // 军候在侧、旗立，压得住
@@ -707,6 +716,7 @@ void Sim::moraleBlock(int block) {
         // 看见同伴跑 / 溃兵从身边穿过：只在本来就动摇的人身上发酵（士气 70 以上免疫，35 时一半）；后队压得住前队
         // 而且只会把人压到溃走线以上 10 点：看见人跑只会动摇，不会直接溃；真正溃走要靠伤亡、侧背、疲劳、军候倒下
         float shaky = clampf((70.f - s.morale[i]) / 70.f, 0.f, 1.f);
+        if (trampled) shaky = std::max(shaky, P.trampleShaky);   // 溃骑冲阵：马匹践踏，不论士气高低都乱（《后汉书》多见「还走，自相蹈藉」）
         float floorM = ((s.flags[i] & 8) ? P.moraleThresholdElite : P.moraleThreshold) + 10.f;
         float loss = 0.f;
         if (r) loss += std::min(2, r) * P.mRoutNear * scale * shaky;
@@ -777,7 +787,9 @@ void Sim::updateUnitsPost() {
     if (S.general >= 0 && s.state[S.general] < S_WOUNDED) { S.gx = s.x[S.general]; S.gy = s.y[S.general]; }
     if (!S.fled && !S.generalDown) {
       int brokenN = 0, unitsN = 0; for (auto& u : w.units) if (u.side == sd) { unitsN += (int)u.members.size(); if (u.broken || u.alive + u.routed == 0) brokenN += (int)u.members.size(); }   // 按人数计：小曲被冲散不算全军溃
-      if (unitsN && brokenN > P.generalFleeFrac * unitsN) {
+      float enemyNearGen = 1e9f; for (auto& v : w.units) if (v.side != sd && v.alive > 10) enemyNearGen = std::min(enemyNearGen, len(v.cx - S.gx, v.cy - S.gy));
+      // 主将走：溃者过六成；或过三成五且敌已逼近主将 150 m 内（不因一翼骑兵失利就弃军）
+      if (unitsN && (brokenN > 0.6f * unitsN || (brokenN > 0.35f * unitsN && enemyNearGen < 150.f))) {
         S.fled = true; log(S.name + "主将见诸营皆溃，引亲骑走，三军夺气");
         for (size_t j = 0; j < s.size(); j++) if (s.side[j] == sd && s.state[j] < S_WOUNDED) s.morale[j] -= P.mGeneralDown;
         for (auto& u : w.units) if (u.side == sd) { Order o{O_RETREAT, S.gx + (S.gx - w.sides[1 - sd].gx), S.gy + (S.gy - w.sides[1 - sd].gy)}; issue(u.id, o, true); }

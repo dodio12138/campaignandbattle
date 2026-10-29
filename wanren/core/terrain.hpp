@@ -28,7 +28,7 @@ struct Terrain {
   inline uint8_t typeAt(float x, float y) const { return type[(size_t)iy(y) * w + ix(x)]; }
   inline bool blocked(float x, float y) const { return typeAt(x, y) == T_WATER; }
   inline bool blockedFor(float x, float y, bool cav) const { uint8_t t = typeAt(x, y); return t == T_WATER || (cav && t == T_STOCKADE); }   // 马不能越车营
-  void ring(float cx, float cy, float r, uint8_t t) { for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) { float dx = (i + 0.5f) * cell - cx, dy = (j + 0.5f) * cell - cy, d = sqrtf(dx * dx + dy * dy); if (fabsf(d - r) < cell * 0.6f) type[(size_t)j * w + i] = t; } }
+  void ring(float cx, float cy, float r, uint8_t t) { for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) { float dx = (i + 0.5f) * cell - cx, dy = (j + 0.5f) * cell - cy, d = sqrtf(dx * dx + dy * dy); if (fabsf(d - r) < cell * 0.75f) type[(size_t)j * w + i] = t; } }   // 0.75 格半宽：栅格化后无斜缝
   // 速度倍率（类型）
   static inline float speedMul(uint8_t t) { switch (t) { case T_FOREST: return 0.6f; case T_FORD: return 0.4f; case T_MARSH: return 0.5f; case T_STOCKADE: return 0.3f; case T_WATER: return 0.f; default: return 1.f; } }
   // 沿方向 (dx,dy)（单位向量）的坡度：每米升高米数
