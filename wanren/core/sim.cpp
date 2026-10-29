@@ -128,7 +128,8 @@ void Sim::cavalryBrain(Unit& u) {
   switch (u.cavPhase) {
     case CP_CHARGE:
       keepCharging();
-      if (engagedNow) { u.cavPhase = CP_MELEE; u.cavTimer = 0; u.cycles++; }
+      if (targetBroken) { u.cavPhase = CP_PURSUE; u.cavTimer = 0; }
+      else if (engagedNow) { u.cavPhase = CP_MELEE; u.cavTimer = 0; u.cycles++; }
       else if (exhausted) startDisengage(u, -ux, -uy);
       break;
     case CP_MELEE:
@@ -150,7 +151,7 @@ void Sim::cavalryBrain(Unit& u) {
       }
       break; }
     case CP_PURSUE:
-      keepCharging();
+      keepCharging(); u.gx = T.routed > 0 ? T.routX : T.cx; u.gy = T.routed > 0 ? T.routY : T.cy;   // 追的是跑着的人，不是空了的阵位
       if (u.cavTimer > P.cavPursueSeconds || exhausted || !targetBroken) startDisengage(u, -ux, -uy);
       break;
     case CP_SWEEP: case CP_SWING: {
@@ -185,12 +186,25 @@ void Sim::updateUnitsPre() {
     us.walk = cav ? P.walkHorse : P.walkFoot; us.rout = cav ? P.routHorse : P.routFoot;
     us.run = cav ? P.chargeHorse : P.runFoot;
   }
+  // 让路：薄横列被本方成阵（厚阵，行进中）穿过时，在其路径处开口
+  for (auto& v : w.units) {
+    if (v.alive == 0 || v.hy >= 6.f) continue;
+    for (auto& u : w.units) {
+      if (u.id == v.id || u.side != v.side || u.alive == 0 || u.hy < 6.f) continue;
+      if (!(u.stance == ST_MOVE || u.stance == ST_CHARGE || u.stance == ST_DISENGAGE || u.stance == ST_RETREAT)) continue;
+      float dx = u.cx - v.cx, dy = u.cy - v.cy;
+      float lx = dx * v.fy - dy * v.fx, ly = dx * v.fx + dy * v.fy;   // u 在 v 局部系：lx 沿横列，ly 向前
+      float reach = u.halfWidth + v.hy + 25.f;
+      if (fabsf(ly) < reach && fabsf(lx) < v.hx + u.hx) { v.gapX = lx; v.gapHW = u.hx + P.gapMargin; v.gapTimer = P.gapSeconds; }
+    }
+  }
   for (auto& u : w.units) {
     if (u.alive == 0) continue;
     if (kindIsCav(u.kind)) cavalryBrain(u);
     bool engagedRecently = w.tick - u.lastEngagedTick < 10;
     const Params::FormMod& fm = P.form[u.formation];
     float spd = ((u.stance == ST_CHARGE || u.stance == ST_DISENGAGE || u.freeMove) ? unitSpeed[u.id].run : unitSpeed[u.id].walk) * (1.f - unitFatigue[u.id] / 200.f) * P.unitSpeedMul * fm.speed;
+    { uint8_t tt = w.terrain.typeAt(u.cx, u.cy); spd *= Terrain::speedMul(tt == T_WATER ? T_FORD : tt); }
     if (u.charging > 0) u.charging--;
     // 轮转：角速度受外翼步速限制（宽阵转得慢但整齐）；冲锋时放宽一倍
     auto turnToward = [&](float tx, float ty, float rateMul) -> float {
@@ -227,6 +241,16 @@ void Sim::updateUnitsPre() {
           }
           if (d > 0 && (ax != 0 || ay != 0)) { tx += ax; ty += ay; float l = len(tx, ty); tx /= l; ty /= l; }
         }
+        // 河：前方 30 m 内有水则沿岸走向最近渡口
+        if (d > 0) {
+          const Terrain& T = w.terrain; bool waterAhead = false;
+          for (float la = 10.f; la <= 30.f; la += 10.f) if (T.blocked(u.cx + tx * la, u.cy + ty * la)) { waterAhead = true; break; }
+          if (waterAhead && !T.blocked(u.gx, u.gy)) {
+            float bx = 0, by = 0, bd = 1e9f; for (auto& f : T.fords) { float dd = len(f.first - u.cx, f.second - u.cy); if (dd < bd) { bd = dd; bx = f.first; by = f.second; } }
+            if (bd < 1e9f && bd > 12.f) { float fx_ = bx - u.cx, fy_ = by - u.cy, fl = len(fx_, fy_); tx = fx_ / fl; ty = fy_ / fl; }   // 先去渡口
+            else if (bd >= 1e9f) d = 0;   // 没有渡口：停
+          }
+        }
         if (d <= 0) { u.stance = ST_HOLD; u.gx = u.cx; u.gy = u.cy; }
         else if (u.stance == ST_DISENGAGE) { mul = 1.f; }                                   // 各骑自行拨马，整体直接退走，不轮转
         else if (u.freeMove) { turnToward(u.tfx, u.tfy, 6.f); mul = 1.f; }                   // 游射：面向目标，任意方向全速
@@ -235,15 +259,29 @@ void Sim::updateUnitsPre() {
           float cosA = tx * u.fx + ty * u.fy; mul = cosA < -0.5f ? 0.8f : (cosA > 0.5f ? 1.f : 0.6f);
         } else {
           remaining = turnToward(tx, ty, (u.stance == ST_CHARGE || u.stance == ST_DISENGAGE) ? 2.f : 1.f);
-          mul = remaining > 0.5f ? 0.5f : 1.f;   // 大角度轮转时中心减速，外翼才跟得上
+          mul = (remaining > 0.5f && w.terrain.typeAt(u.cx, u.cy) != T_FORD) ? 0.5f : 1.f;   // 大角度轮转时中心减速，外翼才跟得上（渡口上不减：半济之际不恋阵）
         }
-        if (d > 0) { float stepL = std::min(d, spd * mul * P.dt); u.cx += tx * stepL; u.cy += ty * stepL; }
+        if (d > 0) {
+          float stepL = std::min(d, spd * mul * P.dt);
+          // 中心也不入水：直走被挡则依次试 ±30°、±60°、±90°、±120°
+          const Terrain& T = w.terrain; float mx = tx, my = ty;
+          auto clear = [&](float rx_, float ry_) { return !T.blocked(u.cx + rx_ * 3.f, u.cy + ry_ * 3.f) && !T.blocked(u.cx + rx_ * 8.f, u.cy + ry_ * 8.f) && !T.blocked(u.cx + rx_ * 15.f, u.cy + ry_ * 15.f); };
+          bool ok = clear(tx, ty);
+          for (int k = 1; k <= 5 && !ok; k++) for (int sg = -1; sg <= 1 && !ok; sg += 2) { float ang = sg * k * 0.5236f, c = cosf(ang), sn = sinf(ang); float rx_ = tx * c - ty * sn, ry_ = tx * sn + ty * c; if (clear(rx_, ry_)) { mx = rx_; my = ry_; ok = true; } }
+          if (!ok) { ok = !T.blocked(u.cx + tx * 3.f, u.cy + ty * 3.f); }   // 实在没有：只要眼前 3 m 不是水就走
+          if (ok) { u.cx += mx * stepL; u.cy += my * stepL; }
+        }
       }
     }
     // 伏盾：敌至三十米同时俱起
     if (u.stance == ST_PRONE) {
       int e = -1; float bestD = 1e9f;
-      grid.forNear(u.cx, u.cy, 40.f, [&](const Packed& p) { if (p.side == u.side) return; float dx = p.x - u.cx, dy = p.y - u.cy, d = dx * dx + dy * dy; if (d < bestD) { bestD = d; e = p.unit; } });
+      // 沿阵线每 20 m 采样一点，看 35 m 内有无敌人（宽横列不能只看中心）
+      float rx = u.fy, ry = -u.fx; int nS = std::max(1, (int)(u.hx / 20.f));
+      for (int k = -nS; k <= nS; k++) {
+        float qx = u.cx + rx * (k * 20.f), qy = u.cy + ry * (k * 20.f);
+        grid.forNear(qx, qy, 36.f, [&](const Packed& p) { if (p.side == u.side) return; float dx = p.x - qx, dy = p.y - qy, d = dx * dx + dy * dy; if (d < bestD) { bestD = d; e = p.unit; } });
+      }
       if (e >= 0 && sqrtf(bestD) < 35.f) {
         const Unit& eu = w.units[e];
         u.stance = ST_CHARGE; u.charging = (int)(30.f / P.dt); u.gx = eu.cx; u.gy = eu.cy;
@@ -273,7 +311,7 @@ void Sim::soldierBlock(int block) {
     bool disengaging = (u.stance == ST_DISENGAGE); bool freeMoveU = u.freeMove;
     float searchR = chargingU ? 8.f : 4.f;
     float sepx = 0, sepy = 0; const Packed* nearest = nullptr; float nd = 1e9f;
-    float fleex = 0, fleey = 0; int enemyNear = 0;
+    float fleex = 0, fleey = 0; int enemyNear = 0, friend3 = 0, enemy3 = 0, routNear = 0;
     uint8_t mySide = s.side[i];
     const float sepR2 = P.sepRadius * P.sepRadius;
     grid.forNear(px, py, searchR, [&](const Packed& p) {
@@ -282,19 +320,27 @@ void Sim::soldierBlock(int block) {
       if (p.side != mySide) {
         if (d2 < nd) { nd = d2; nearest = &p; }
         if (d2 < 625.f) { enemyNear++; float inv = 1.f / (d2 + 1.f); fleex -= dx * inv; fleey -= dy * inv; }
+        if (d2 < 9.f && p.state != S_ROUT) enemy3++;
+      } else {
+        if (d2 < 9.f && p.state == S_FORMED) friend3++;
+        if (d2 < 16.f && p.state == S_ROUT) routNear++;
       }
       if (d2 < sepR2 && d2 > 1e-6f) { float d = sqrtf(d2); float f = (P.sepRadius - d) / P.sepRadius; sepx -= dx / d * f; sepy -= dy / d * f; }
     });
+    s.routNear[i] = (uint8_t)std::min(routNear, 255); s.push[i] = 0;
     float ndist = nearest ? sqrtf(nd) : 1e9f;
     const UnitSpeed& us = unitSpeed[s.unit[i]];
-    float spd = (st == S_ROUT ? us.rout : (chargingU || disengaging || freeMoveU) ? (cav ? us.run : (s.armor[i] >= 2 ? P.runFootArmored : P.runFoot)) : us.walk) * (1.f - s.fatigue[i] / 200.f);
+    const Terrain& T = w.terrain; uint8_t tt = T.typeAt(px, py);
+    float spd = (st == S_ROUT ? us.rout : (chargingU || disengaging || freeMoveU) ? (cav ? us.run : (s.armor[i] >= 2 ? P.runFootArmored : P.runFoot)) : us.walk) * (1.f - s.fatigue[i] / 200.f) * Terrain::speedMul(tt == T_WATER ? T_FORD : tt);
     float vx = 0, vy = 0; bool fighting = false;
 
     if (st == S_ROUT) {
       if (enemyNear) { float l = len(fleex, fleey); if (l > 1e-6f) { vx = fleex / l * spd; vy = fleey / l * spd; } }
       else {
-        const Side& S = w.sides[mySide]; const Side& E = w.sides[1 - mySide];
-        float ex = px - E.gx, ey = py - E.gy, el = len(ex, ey); float dx = S.gx - px, dy = S.gy - py, l = len(dx, dy);
+        // 远离最近的敌曲；没有敌曲则向本方主将方向
+        int e = unitNearEnemyId[s.unit[i]]; const Side& S = w.sides[mySide];
+        float ex = 0, ey = 0; if (e >= 0) { ex = px - w.units[e].cx; ey = py - w.units[e].cy; }
+        float el = len(ex, ey); float dx = S.gx - px, dy = S.gy - py, l = len(dx, dy);
         if (el > 1e-3f) { vx = ex / el * spd; vy = ey / el * spd; } else if (l > 1e-3f) { vx = dx / l * spd; vy = dy / l * spd; }
       }
       s.fatigue[i] = std::min(P.fatigueMax, s.fatigue[i] + P.fatigueRun);
@@ -302,7 +348,8 @@ void Sim::soldierBlock(int block) {
       bool balk = false;
       if (cav && nearest && ndist < P.cavBalkDist + 1.5f) {
         const Unit& eu = w.units[nearest->unit];
-        if (kindIsLong(eu.kind) && eu.cohesion > P.form[eu.formation].balkCoh && nearest->state == S_FORMED) {
+        bool wall = (kindIsLong(eu.kind) && eu.cohesion > P.form[eu.formation].balkCoh) || (eu.shield && eu.cohesion > 0.8f);   // 长兵阵，或稳固的盾墙
+        if (wall && nearest->state == S_FORMED) {
           float ax = px - nearest->x, ay = py - nearest->y, al = len(ax, ay);
           float cosA = al > 1e-4f ? (ax * eu.fx + ay * eu.fy) / al : 1.f;
           if (cosA > balkCos) balk = true;
@@ -319,7 +366,18 @@ void Sim::soldierBlock(int block) {
           buf.push_back({i, nearest->idx, type, impact});
         }
         s.fatigue[i] = std::min(P.fatigueMax, s.fatigue[i] + P.fatigueFight);
+        s.morale[i] -= P.fightMorale;                                   // 久战生畏
         if (balk) { if (s.morale[i] > P.cavBalkFloor) s.morale[i] -= P.cavBalkMorale; engaged[i] = 2; }
+        else if (!cav) {
+          // 推挤：3 m 内人多的一方把人少的一方推开（纵深在此起作用）
+          float ex = nearest->x - px, ey = nearest->y - py, el = len(ex, ey);
+          const Unit& eu2 = w.units[nearest->unit];
+          float score = (friend3 + 1.f) / (enemy3 + 1.f) * (u.hy / std::max(eu2.hy, 1.f));   // 局部人数比 × 纵深比
+          if (el > 1e-3f) {
+            if (score > P.pushRatio) { vx += ex / el * P.pushSpeed; vy += ey / el * P.pushSpeed; s.push[i] = 1; }
+            else if (score < 1.f / P.pushRatio) { vx -= ex / el * P.pushSpeed; vy -= ey / el * P.pushSpeed; s.push[i] = 2; }
+          }
+        }
       } else {
         float tx, ty;
         bool chase = chargingU && !disengaging && k_ != K_CAV_BOW && nearest && ndist < 8.f && !balk;
@@ -342,10 +400,13 @@ void Sim::soldierBlock(int block) {
       if (fighting) s.fatigue[i] = std::min(P.fatigueMax, s.fatigue[i] + P.fatigueFight);
     }
     vx += sepx * P.sepForce; vy += sepy * P.sepForce;
-    float vl = len(vx, vy); float cap = st == S_ROUT ? spd : std::max(spd, 1.5f);
+    float vl = len(vx, vy); float cap = st == S_ROUT ? spd : std::max(spd * Terrain::speedMul(tt == T_WATER ? T_FORD : tt), 1.5f * Terrain::speedMul(tt == T_WATER ? T_FORD : tt));
     if (vl > cap) { vx *= cap / vl; vy *= cap / vl; }
+    // 上坡减速
+    if (vl > 1e-3f) { float sl = T.slope(px, py, vx / vl, vy / vl); if (sl > 0.f) { float m = std::max(0.4f, 1.f - sl * P.slopeSpeed); vx *= m; vy *= m; } }
     s.vx[i] = vx; s.vy[i] = vy;
     float qx = clampf(px + vx * dt, 1.f, P.worldW - 1.f), qy = clampf(py + vy * dt, 1.f, P.worldH - 1.f);
+    if (T.blocked(qx, qy) && !T.blocked(px, py)) { qx = px; qy = py; s.vx[i] = s.vy[i] = 0; }   // 水不可入（已在水里的往外走）
     nx[i] = qx; ny[i] = qy;
     bb.minx = std::min(bb.minx, qx); bb.maxx = std::max(bb.maxx, qx); bb.miny = std::min(bb.miny, qy); bb.maxy = std::max(bb.maxy, qy);
     if (st != S_ROUT) {
@@ -360,19 +421,21 @@ void Sim::soldierBlock(int block) {
   bboxByBlock[block] = bb;
 }
 
-void Sim::squadHit(int i, float amount) {
+void Sim::squadHit(int i, float amount, float floorM) {
   const Unit& u = w.units[w.s.unit[i]]; int sl = w.s.slot[i]; int b = (sl / 5) * 5, e = std::min((int)u.members.size(), b + 5);
-  for (int k = b; k < e; k++) { int j = u.members[k]; if (j != i && w.s.state[j] < S_WOUNDED) w.s.morale[j] -= amount; }
+  for (int k = b; k < e; k++) { int j = u.members[k]; if (j == i || w.s.state[j] >= S_WOUNDED) continue; float& m = w.s.morale[j]; if (m > floorM) m = std::max(floorM, m - amount); }
 }
 
 void Sim::applyDown(int i, int by, bool missile) {
   auto& s = w.s; const Params& P = w.P; Unit& u = w.units[s.unit[i]];
-  bool dead = w.rng.uni() < P.deadRatio;
-  s.state[i] = dead ? S_DEAD : S_WOUNDED; s.vx[i] = s.vy[i] = 0;
+  bool wasRout = s.state[i] == S_ROUT;
+  bool captured = wasRout && !missile && w.rng.uni() < P.captureProb;   // 溃兵被追上：多数就擒
+  bool dead = !captured && w.rng.uni() < P.deadRatio;
+  s.state[i] = captured ? S_CAPTURED : (dead ? S_DEAD : S_WOUNDED); s.vx[i] = s.vy[i] = 0;
   nx[i] = s.x[i]; ny[i] = s.y[i];                 // 两套位置数组从此一致
   int c = grid.cellOf[i]; if (c >= 0) grid.deaths[s.side[i]][c]++;
   squadHit(i, P.mDeathSquad);
-  if (dead) { u.dead++; w.sides[s.side[i]].dead++; } else { u.wounded++; w.sides[s.side[i]].wounded++; }
+  if (captured) { u.captured++; w.sides[s.side[i]].captured++; } else if (dead) { u.dead++; w.sides[s.side[i]].dead++; } else { u.wounded++; w.sides[s.side[i]].wounded++; }
   if (by >= 0) kills[s.side[by]]++;
   if (i == u.officer && u.officerAlive) { u.officerAlive = false; for (int j : u.members) if (s.state[j] < S_WOUNDED) s.morale[j] -= P.mOfficerDown; log(u.name + "军候" + (dead ? "阵殁" : "被创")); }
   if (i == u.flag && u.flagAlive) { u.flagAlive = false; for (int j : u.members) if (s.state[j] < S_WOUNDED) s.morale[j] -= P.mFlagDown; log(u.name + "旗倒"); }
@@ -408,13 +471,14 @@ void Sim::resolveAttacks() {
     if (ka == K_SWORD && kindIsLong(kt) && al < 1.3f) hit *= 1.2f;
     if (kindIsMissile(ka)) hit *= 0.6f;
     if (A.impact) hit *= 1.5f;
+    { float ha = w.terrain.heightAt(s.x[a], s.y[a]), ht = w.terrain.heightAt(s.x[t], s.y[t]); if (ha < ht - P.hillStep) hit *= P.uphillHit; else if (ha > ht + P.hillStep) hit *= P.downhillHit; }
     if (s.state[t] != S_ROUT) s.morale[t] -= (front ? 0.f : P.mFlank) * (A.impact ? P.cavFlankMul : 1.f);
     if (w.rng.uni() >= hit) return 0.f;
     float dmg = ka == K_HALBERD ? P.dmgHalberd : ka == K_SPEAR ? P.dmgSpear : (ka == K_CAV || ka == K_CAV_ARMORED) ? P.dmgLance : P.dmgSword;
     float red = A.type == 0 ? P.armorPierce[s.armor[t]] : P.armorCut[s.armor[t]];
     if ((s.flags[t] & 1) && front && s.state[t] == S_FORMED) red = 1.f - (1.f - red) * (1.f - P.shieldPierce);
     dmg *= (1.f - red);
-    if (A.impact) { dmg *= P.cavImpactMul * P.form[ua.formation].impact; squadHit(t, P.mDeathNear * (front && ut.cohesion > 0.5f ? 1.f : P.cavFlankMul)); }
+    if (A.impact) { dmg *= P.cavImpactMul * P.form[ua.formation].impact * (w.terrain.typeAt(s.x[a], s.y[a]) == T_FOREST ? P.forestImpact : 1.f); squadHit(t, P.mDeathNear * (front && ut.cohesion > 0.5f ? 1.f : P.cavFlankMul)); }
     return dmg;
   };
   auto apply = [&](size_t k) {
@@ -450,6 +514,8 @@ void Sim::volleys() {
     const Unit& T = w.units[tgt];
     float dist = len(T.cx - u.cx, T.cy - u.cy);
     if (dist < P.missileMinRange) { u.reload = 1.f; continue; }
+    { float dh = w.terrain.heightAt(u.cx, u.cy) - w.terrain.heightAt(T.cx, T.cy); float rm = clampf(1.f + dh * P.heightRange, 0.8f, 1.25f); range *= rm; maxR *= rm; }   // 居高射远
+    if (u.fireDiscipline && dist > range && !kindIsCav(T.kind)) { u.reload = 0.5f; continue; }   // 待敌近：进入有效射程再齐射
     float rangeMul = dist <= range ? 1.f : std::max(0.f, (maxR - dist) / (maxR - range));
     float sigma = dist * P.volleySpread + 2.f;
     int shotN = 0, hits = 0;
@@ -468,6 +534,7 @@ void Sim::volleys() {
       float ix = u.cx - s.x[best], iy = u.cy - s.y[best], il = len(ix, iy); float cosA = il > 1e-4f ? (ix * tu.fx + iy * tu.fy) / il : 1.f;
       if ((s.flags[best] & 1) && cosA > 0.3f && s.state[best] == S_FORMED) p *= (1.f - P.shieldArrow);
       if (s.state[best] == S_ROUT) p *= 1.5f;
+      if (w.terrain.typeAt(s.x[best], s.y[best]) == T_FOREST) p *= P.forestCover;
       if (w.rng.uni() >= p) continue;
       float red = P.armorArrow[s.armor[best]]; if (u.kind == K_HXBOW) red *= P.hxbowArmorBreak;
       if (s.flags[best] & 32) red = std::max(red, P.horseArmorArrow);
@@ -490,12 +557,25 @@ void Sim::moraleBlock(int block) {
     if (s.state[i] >= S_WOUNDED) continue;
     int ui = s.unit[i]; const Unit& u = w.units[ui]; uint8_t sd = s.side[i];
     int c = grid.cellOf[i];
-    if (c >= 0) {
-      int d = grid.sumEvents(grid.deaths[sd], s.x[i], s.y[i], 4.f), r = grid.sumEvents(grid.routs[sd], s.x[i], s.y[i], 4.f);
-      if (d | r) {
+    if (c >= 0 && s.state[i] != S_ROUT) {
+      int d = grid.deaths[sd][c], r = grid.routs[sd][c];   // 只看同格：看得见的才吓人（深阵不因此比横列更脆）
+      int rn = s.routNear[i];
+      if (d | r | rn) {
         float scale = (w.tick - u.lastEngagedTick < 50 ? 1.f : P.contagionIdle) * (1.f - P.contagionCohesion * u.cohesion);
-        if (d) s.morale[i] -= std::min(2, d) * P.mDeathNear * scale;
-        if (r) s.morale[i] -= std::min(2, r) * P.mRoutNear * scale;
+        if (u.officerAlive && u.flagAlive) { float ox = s.x[u.officer] - s.x[i], oy = s.y[u.officer] - s.y[i]; if (ox * ox + oy * oy < P.officerRadius * P.officerRadius) scale *= P.officerSuppress; }   // 军候在侧、旗立，压得住
+        if (d) s.morale[i] -= std::min(2, d) * P.mDeathNear * scale;                 // 看见同伴倒下：谁都怕
+        // 看见同伴跑 / 溃兵从身边穿过：只在本来就动摇的人身上发酵（士气 70 以上免疫，35 时一半）；后队压得住前队
+        // 而且只会把人压到溃走线以上 10 点：看见人跑只会动摇，不会直接溃；真正溃走要靠伤亡、侧背、疲劳、军候倒下
+        float shaky = clampf((70.f - s.morale[i]) / 70.f, 0.f, 1.f);
+        float floorM = ((s.flags[i] & 8) ? P.moraleThresholdElite : P.moraleThreshold) + 10.f;
+        float loss = 0.f;
+        if (r) loss += std::min(2, r) * P.mRoutNear * scale * shaky;
+        if (rn) {
+          float sc2 = shaky * (1.f - P.contagionCohesion * u.cohesion);
+          if (u.officerAlive && u.flagAlive) { float ox = s.x[u.officer] - s.x[i], oy = s.y[u.officer] - s.y[i]; if (ox * ox + oy * oy < P.officerRadius * P.officerRadius) sc2 *= P.officerSuppress; }
+          loss += std::min(rn, P.routNearCap) * P.routNearPerTick * sc2;
+        }
+        if (loss > 0.f && s.morale[i] > floorM) s.morale[i] = std::max(floorM, s.morale[i] - loss);
       }
     }
     s.morale[i] = clampf(s.morale[i], -50.f, 100.f);
@@ -506,8 +586,8 @@ void Sim::moraleBlock(int block) {
       else s.morale[i] = std::min(s.morale[i] + P.mRecover * 0.5f, th + 5.f);
     }
     UnitAcc& a = acc[ui];
-    if (s.state[i] == S_ROUT) { a.routed++; continue; }
-    a.alive++; a.msum += s.morale[i]; a.fsum += s.fatigue[i];
+    if (s.state[i] == S_ROUT) { a.routed++; a.rsx += s.x[i]; a.rsy += s.y[i]; continue; }
+    a.alive++; a.msum += s.morale[i]; a.fsum += s.fatigue[i]; if (s.push[i] == 1) a.push1++; else if (s.push[i] == 2) a.push2++;
     float wx, wy; slotWorld(u, s.slot[i], wx, wy);
     float dx = wx - s.x[i], dy = wy - s.y[i]; if (dx * dx + dy * dy < P.slotTol * P.slotTol) a.inSlot++;
     if (engaged[i] == 1) a.engaged = 1; else if (engaged[i] == 2) a.balk++;
@@ -516,7 +596,7 @@ void Sim::moraleBlock(int block) {
 
 void Sim::applyRoutEvents() {
   const Params& P = w.P; auto& s = w.s;
-  for (auto& ev : routsByBlock) for (int i : ev) { squadHit(i, P.mRoutSquad); int c = grid.cellOf[i]; if (c >= 0) grid.routs[s.side[i]][c]++; }
+  for (auto& ev : routsByBlock) for (int i : ev) { squadHit(i, P.mRoutSquad, P.moraleThreshold + 5.f); int c = grid.cellOf[i]; if (c >= 0) grid.routs[s.side[i]][c]++; }   // 同伍逃走：动摇，但本身不致溃
 }
 
 void Sim::updateUnitsPost() {
@@ -525,9 +605,13 @@ void Sim::updateUnitsPost() {
   for (int sd = 0; sd < 2; sd++) { w.sides[sd].alive = 0; w.sides[sd].routed = 0; }
   for (auto& u : w.units) {
     UnitAcc t;
-    for (int b = 0; b < nbM; b++) { const UnitAcc& a = accByBlock[(size_t)b * U + u.id]; t.alive += a.alive; t.inSlot += a.inSlot; t.routed += a.routed; t.balk += a.balk; t.engaged |= a.engaged; t.msum += a.msum; t.fsum += a.fsum; }
+    for (int b = 0; b < nbM; b++) { const UnitAcc& a = accByBlock[(size_t)b * U + u.id]; t.alive += a.alive; t.inSlot += a.inSlot; t.routed += a.routed; t.balk += a.balk; t.engaged |= a.engaged; t.msum += a.msum; t.fsum += a.fsum; t.push1 += a.push1; t.push2 += a.push2; t.rsx += a.rsx; t.rsy += a.rsy; }
+    if (t.routed > 0) { u.routX = (float)(t.rsx / t.routed); u.routY = (float)(t.rsy / t.routed); } else { u.routX = u.cx; u.routY = u.cy; }
     u.alive = t.alive; u.routed = t.routed; u.balking = t.balk; u.balkTicks = u.balking > 0 ? u.balkTicks + 1 : 0;
     if (t.engaged) u.lastEngagedTick = w.tick;
+    // 推挤：曲中心随净推挤方向沿朝向前进 / 后退（被推的阵线后退，推进的阵线前压）
+    if (t.push1 != t.push2 && u.alive > 0 && u.stance != ST_DISENGAGE) { float net = (float)(t.push1 - t.push2) / std::max(1, std::max(t.push1, t.push2)); float stepL = net * P.pushSpeed * P.centerPush * P.dt; u.cx += u.fx * stepL; u.cy += u.fy * stepL; }
+    if (u.gapTimer > 0.f) u.gapTimer -= P.dt;
     u.cohesion = u.alive ? (float)t.inSlot / u.alive : 0.f;
     u.moraleAvg = u.alive ? t.msum / u.alive : 0.f;
     unitFatigue[u.id] = u.alive ? t.fsum / u.alive : 0.f;
@@ -552,7 +636,7 @@ void Sim::updateUnitsPost() {
     Side& S = w.sides[sd];
     if (S.general >= 0 && s.state[S.general] < S_WOUNDED) { S.gx = s.x[S.general]; S.gy = s.y[S.general]; }
     if (!S.fled && !S.generalDown) {
-      int brokenN = 0, unitsN = 0; for (auto& u : w.units) if (u.side == sd && u.members.size() > 50) { unitsN++; if (u.broken || u.alive + u.routed == 0) brokenN++; }
+      int brokenN = 0, unitsN = 0; for (auto& u : w.units) if (u.side == sd) { unitsN += (int)u.members.size(); if (u.broken || u.alive + u.routed == 0) brokenN += (int)u.members.size(); }   // 按人数计：小曲被冲散不算全军溃
       if (unitsN && brokenN > P.generalFleeFrac * unitsN) {
         S.fled = true; log(S.name + "主将见诸营皆溃，引亲骑走，三军夺气");
         for (size_t j = 0; j < s.size(); j++) if (s.side[j] == sd && s.state[j] < S_WOUNDED) s.morale[j] -= P.mGeneralDown;

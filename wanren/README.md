@@ -13,6 +13,8 @@ npm run build                          # = cmake -S . -B build && cmake --build 
 ./build/wanren_test                                       # 回归测试
 ```
 
+地形：10 m 网格，高程 / 林 / 水 / 渡口 / 沼（`core/terrain.hpp`，剧本里用 `TerrainFeature` 摆放）；林慢、沼慢、水不可入、遇河自动绕渡口、仰攻吃亏、居高射远。
+
 行进规则：转向按轮转做，角速度受外翼步速限制（宽阵转得慢但整齐），大角度轮转时减速；短距离侧向 / 后向调整自动平移；行进中绕开厚的友军方阵，薄横列（纵深 < 6 m）可穿过但两边都会乱一阵。
 
 参数：复制 `params.example.txt` 为 `params.txt`（程序启动目录），每行 `key = value` 覆盖默认值；键名见 `core/params.hpp`。

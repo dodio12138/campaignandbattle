@@ -21,6 +21,7 @@ struct App {
   SDL_Window* win = nullptr; SDL_GLContext ctx = nullptr; Gfx gfx; Camera cam; float dpi = 1.f;
   SimThread st; int scenarioIdx = 0; uint32_t seed = 1; int player = 0;
   std::shared_ptr<const Snapshot> cur, prev; double curArrival = 0; int seenGeneration = -1;
+  GLuint terrainTex = 0; int terrainW = 0, terrainH = 0; float terrainWorldW = 3000, terrainWorldH = 3000;
   std::vector<float> xy; std::vector<uint8_t> rgba;
   std::set<int> sel;
   bool dragging = false, selecting = false; int selX0 = 0, selY0 = 0, mx = 0, my = 0;
@@ -30,8 +31,30 @@ struct App {
   std::string shotPath; int shotTicks = 0; double runSeconds = 0; int shotAfter = 0; float shotZoom = 0; int centerUnit = -1; std::vector<Order> demoOrders; std::vector<int> demoUnits;
 
   void requestLoad() { Cmd c; c.type = Cmd::RESET; c.scenario = scenarioIdx; c.seed = seed; c.player = player; st.push(c); }
+  void buildTerrainTexture(const Terrain& T) {
+    if (terrainTex) { glDeleteTextures(1, &terrainTex); terrainTex = 0; }
+    std::vector<uint8_t> px((size_t)T.w * T.h * 4);
+    float hmin = 1e9f, hmax = -1e9f; for (float v : T.height) { hmin = std::min(hmin, v); hmax = std::max(hmax, v); }
+    float hr = std::max(1.f, hmax - hmin);
+    for (int j = 0; j < T.h; j++) for (int i = 0; i < T.w; i++) {
+      size_t k = (size_t)j * T.w + i; uint8_t t = T.type[k]; float hn = (T.height[k] - hmin) / hr;
+      uint8_t r, g, b;
+      switch (t) {
+        case T_FOREST: r = 120; g = 150; b = 95; break;
+        case T_WATER: r = 150; g = 180; b = 205; break;
+        case T_FORD: r = 190; g = 200; b = 195; break;
+        case T_MARSH: r = 170; g = 175; b = 130; break;
+        default: { float sh = 1.f - hn * 0.28f; r = (uint8_t)(237 * sh); g = (uint8_t)(227 * sh); b = (uint8_t)(204 * sh); }   // 宣纸色随高程变深
+      }
+      // 等高线：每 3 m 一条淡线
+      if (t == T_OPEN || t == T_FOREST) { float hh = T.height[k]; float m = fmodf(hh, 3.f); if (m < 0.35f && hh > 0.5f) { r = (uint8_t)(r * 0.85f); g = (uint8_t)(g * 0.85f); b = (uint8_t)(b * 0.85f); } }
+      px[k * 4] = r; px[k * 4 + 1] = g; px[k * 4 + 2] = b; px[k * 4 + 3] = 255;
+    }
+    terrainTex = gfx.makeTexture(T.w, T.h, px.data()); terrainW = T.w; terrainH = T.h; terrainWorldW = T.w * T.cell; terrainWorldH = T.h * T.cell;
+  }
   void onNewGeneration(const Snapshot& s) {
     sel.clear(); prev.reset();
+    if (s.terrain) buildTerrainTexture(*s.terrain);
     float sx = 0, sy = 0; int n = 0; for (auto& u : s.units) if (u.side == player) { sx += u.cx; sy += u.cy; n++; }
     if (n) { cam.cx = sx / n; cam.cy = sy / n + 120.f * (player == 0 ? 1 : -1); }
     cam.zoom = 1.6f * dpi;
@@ -112,6 +135,7 @@ struct App {
   void draw(const Snapshot& s, const Snapshot* p, double alpha, bool fast, bool swap = true) {
     int dw, dh; SDL_GL_GetDrawableSize(win, &dw, &dh); cam.W = dw; cam.H = dh;
     gfx.begin(dw, dh);
+    if (terrainTex) { float x0, y0, x1, y1; cam.toScreen(0, terrainWorldH, x0, y0); cam.toScreen(terrainWorldW, 0, x1, y1); gfx.texQuad(x0, y0, x1 - x0, y1 - y0, terrainTex, 0, 1, 1, 0); }
     size_t n = s.x.size();
     bool interp = p && !fast && p->x.size() == n && p->generation == s.generation;
     xy.resize(n * 2); rgba.resize(n * 4);
@@ -126,6 +150,7 @@ struct App {
       uint8_t r, g, b, a = 255;
       if (st == S_DEAD) { xy2.push_back(sx); xy2.push_back(sy); c2.insert(c2.end(), {60, 50, 45, 170}); continue; }
       if (st == S_WOUNDED) { xy2.push_back(sx); xy2.push_back(sy); c2.insert(c2.end(), {(uint8_t)(red ? 150 : 100), (uint8_t)(red ? 90 : 100), (uint8_t)(red ? 90 : 150), 120}); continue; }
+      if (st == S_CAPTURED) { xy2.push_back(sx); xy2.push_back(sy); c2.insert(c2.end(), {110, 110, 120, 140}); continue; }
       if (red) { r = 176; g = 36; b = 36; } else { r = 36; g = 72; b = 170; }
       if (st == S_ROUT) { r = (uint8_t)(r * 0.5f + 120); g = (uint8_t)(g * 0.5f + 120); b = (uint8_t)(b * 0.5f + 120); }
       if (kindIsMissile(s.kind[i])) g = (uint8_t)std::min(255, g + 60);
@@ -183,7 +208,7 @@ struct App {
     gfx.rect(0, 0, (float)dw, lh * 2.3f + pad, RGBA(255, 252, 240, 215)); gfx.flush();
     for (int sd = 0; sd < 2; sd++) {
       const Side& S = s.sides[sd];
-      snprintf(buf, sizeof buf, "%s%s  总 %d  在阵 %d  阵亡 %d  伤 %d  溃 %d%s%s", S.name.c_str(), sd == player ? "（我）" : "（AI）", S.total, S.alive, S.dead, S.wounded, S.routed, S.generalDown ? "  主将殁" : "", S.fled ? "  主将走" : "");
+      snprintf(buf, sizeof buf, "%s%s  总 %d  在阵 %d  阵亡 %d  伤 %d  降 %d  溃 %d%s%s", S.name.c_str(), sd == player ? "（我）" : "（AI）", S.total, S.alive, S.dead, S.wounded, S.captured, S.routed, S.generalDown ? "  主将殁" : "", S.fled ? "  主将走" : "");
       gfx.text(buf, pad + sd * dw * 0.5f, pad * 0.5f, sd == 0 ? C_RED : C_BLUE);
     }
     float sp = SimThread::SPEEDS[st.speedIdx.load()]; char spd[64];

@@ -20,6 +20,7 @@ struct Snapshot {
   std::vector<float> x, y; std::vector<uint8_t> side, state, kind, flags; std::vector<int32_t> unit;
   std::vector<UnitView> units; Side sides[2]; std::vector<Event> events; std::vector<Shot> shots;
   bool ended = false; int winner = -1; int threads = 1; size_t nSoldiers = 0;
+  std::shared_ptr<const Terrain> terrain;   // 载入时拷一份，各快照共享
 };
 
 struct Cmd { enum Type { ORDER, RESET, TOGGLE_AI } type; int unit = 0; Order order{O_HALT}; int scenario = 0; uint32_t seed = 1; int player = 0; };
@@ -44,7 +45,7 @@ class SimThread {
   Sim* simNow() { return sim_.get(); }
 
  private:
-  std::unique_ptr<Sim> sim_; int generation_ = 0; bool ended_ = false; int winner_ = -1;
+  std::unique_ptr<Sim> sim_; int generation_ = 0; std::shared_ptr<const Terrain> terrain_; bool ended_ = false; int winner_ = -1;
   std::thread th_; std::atomic<bool> running_{false};
   std::mutex cm_; std::vector<Cmd> cmds_;
   std::mutex sm_; std::shared_ptr<Snapshot> latest_; std::vector<std::shared_ptr<Snapshot>> pool_;
@@ -56,6 +57,7 @@ class SimThread {
     ScenarioDef def = scenarios()[scenario]; def.aiSide[player] = false; def.aiSide[1 - player] = true;
     loadScenario(*sim_, def);
     unitNames.clear(); for (auto& u : sim_->w.units) unitNames.push_back(u.name); title = def.title;
+    terrain_ = std::make_shared<const Terrain>(sim_->w.terrain);
     generation_++; ended_ = false; winner_ = -1; tickWindow_ = 0; actual_ = 0;
     publish(true);
   }
@@ -78,7 +80,7 @@ class SimThread {
     for (size_t i = 0; i < sim_->w.units.size(); i++) { const Unit& u = sim_->w.units[i]; sn->units[i] = {u.id, u.side, u.kind, u.formation, u.stance, u.elite, u.officerAlive, u.flagAlive, u.broken, !u.orders.empty(), u.cx, u.cy, u.fx, u.fy, u.gx, u.gy, u.cohesion, u.moraleAvg, sim_->unitFatigue[u.id], u.alive, u.dead, u.wounded, u.routed, u.cavPhase, u.cycles}; }
     sn->sides[0] = sim_->w.sides[0]; sn->sides[1] = sim_->w.sides[1];
     const auto& ev = sim_->w.events; size_t ne = std::min<size_t>(14, ev.size()); sn->events.assign(ev.end() - ne, ev.end());
-    sn->shots = sim_->shots; sn->ended = ended_; sn->winner = winner_; sn->threads = sim_->pool->threads(); sn->nSoldiers = s.size();
+    sn->shots = sim_->shots; sn->terrain = terrain_; sn->ended = ended_; sn->winner = winner_; sn->threads = sim_->pool->threads(); sn->nSoldiers = s.size();
     { std::lock_guard<std::mutex> lk(sm_); latest_ = sn; }
   }
   void loop() {

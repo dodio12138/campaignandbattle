@@ -7,7 +7,7 @@
 
 struct Attack { int32_t a, t; uint8_t type; bool impact; };   // type: 0 刺 1 砍
 struct Shot { float x0, y0, x1, y1; int tick; uint8_t side; bool hit; };   // 一支箭：起点、落点、发射 tick、是否命中（供画面用）
-struct UnitAcc { int alive = 0, inSlot = 0, routed = 0, balk = 0, engaged = 0; float msum = 0, fsum = 0; };
+struct UnitAcc { int alive = 0, inSlot = 0, routed = 0, balk = 0, engaged = 0, push1 = 0, push2 = 0; float msum = 0, fsum = 0; double rsx = 0, rsy = 0; };
 struct UnitSpeed { float walk = 1, run = 1, rout = 1; };
 struct BBox { float minx = 1e9f, miny = 1e9f, maxx = -1e9f, maxy = -1e9f; };
 
@@ -54,6 +54,6 @@ struct Sim {
   void applyRoutEvents();
   void updateUnitsPost();
   void applyDown(int i, int by, bool missile);
-  void squadHit(int i, float amount);
+  void squadHit(int i, float amount, float floorM = -1e9f);
   void computeBBox();
 };

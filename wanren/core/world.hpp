@@ -6,6 +6,7 @@
 #include <deque>
 #include "params.hpp"
 #include "rng.hpp"
+#include "terrain.hpp"
 
 enum Kind : uint8_t { K_HALBERD, K_SPEAR, K_SWORD, K_BOW, K_XBOW, K_HXBOW, K_CAV, K_CAV_BOW, K_CAV_ARMORED, K_COUNT };
 inline bool kindIsCav(uint8_t k) { return k >= K_CAV; }
@@ -16,7 +17,7 @@ inline const char* kindName(uint8_t k) {
   return k < K_COUNT ? n[k] : "?";
 }
 
-enum State : uint8_t { S_FORMED, S_ROUT, S_RALLY, S_WOUNDED, S_DEAD };
+enum State : uint8_t { S_FORMED, S_ROUT, S_RALLY, S_WOUNDED, S_DEAD, S_CAPTURED };   // >= S_WOUNDED 即退出战斗
 enum Formation : uint8_t { F_SQUARE, F_DENSE, F_LOOSE, F_CIRCLE, F_WEDGE, F_GOOSE, F_LINE, F_COLUMN, F_COUNT };
 inline const char* formationName(uint8_t f) {
   static const char* n[] = {"方阵", "数阵", "疏阵", "圆阵", "锥形", "雁行", "横列", "纵队"};
@@ -57,7 +58,10 @@ struct Unit {
   bool officerAlive = true, flagAlive = true;
   bool broken = false, brokenNotified = false;
   float cohesion = 1.f, moraleAvg = 70.f;
-  int alive = 0, dead = 0, wounded = 0, routed = 0;
+  int alive = 0, dead = 0, wounded = 0, routed = 0, captured = 0;
+  float gapX = 0, gapHW = 0, gapTimer = 0;
+  float routX = 0, routY = 0;                       // 本曲溃兵的重心（追击用）
+  bool fireDiscipline = false;                      // 弩待敌进入有效射程再射（AI 方默认开；对骑兵仍可远射）          // 让路：局部 x 处开口（薄横列被友军成阵穿过时）
   bool cavThreat = false;                           // 侧后有敌骑
   int charging = 0;                                 // 冲锋中剩余 tick
   int balking = 0;                                  // 本 tick 勒马徘徊的骑兵数
@@ -71,7 +75,7 @@ struct Side {
   int general = -1;                 // 主将所在士卒下标
   int generalUnit = -1;
   bool generalDown = false, fled = false;
-  int alive = 0, dead = 0, wounded = 0, routed = 0, total = 0;
+  int alive = 0, dead = 0, wounded = 0, routed = 0, captured = 0, total = 0;
   float gx = 0, gy = 0;             // 主将位置（令由此发）
   bool ai = false;                  // 是否由 AI 指挥
   float aiTimer = 0;
@@ -79,13 +83,13 @@ struct Side {
 
 struct Soldiers {
   std::vector<float> x, y, vx, vy, morale, fatigue, hp;
-  std::vector<uint8_t> state, side, kind, armor, cd, flags;   // flags: bit0 shield, bit1 officer, bit2 flagbearer, bit3 elite, bit4 general, bit5 horseArmor
+  std::vector<uint8_t> state, side, kind, armor, cd, flags, routNear, push;   // routNear: 4 m 内本方溃兵数；push: 0 无 1 推进 2 被推   // flags: bit0 shield, bit1 officer, bit2 flagbearer, bit3 elite, bit4 general, bit5 horseArmor
   std::vector<int32_t> unit, slot, target;
   size_t size() const { return x.size(); }
-  void reserve(size_t n) { x.reserve(n); y.reserve(n); vx.reserve(n); vy.reserve(n); morale.reserve(n); fatigue.reserve(n); hp.reserve(n); state.reserve(n); side.reserve(n); kind.reserve(n); armor.reserve(n); cd.reserve(n); flags.reserve(n); unit.reserve(n); slot.reserve(n); target.reserve(n); }
+  void reserve(size_t n) { x.reserve(n); y.reserve(n); vx.reserve(n); vy.reserve(n); morale.reserve(n); fatigue.reserve(n); hp.reserve(n); state.reserve(n); side.reserve(n); kind.reserve(n); armor.reserve(n); cd.reserve(n); flags.reserve(n); routNear.reserve(n); push.reserve(n); unit.reserve(n); slot.reserve(n); target.reserve(n); }
   int add(float px, float py, uint8_t s, uint8_t k, uint8_t a, int u, int sl, float m) {
     x.push_back(px); y.push_back(py); vx.push_back(0); vy.push_back(0); morale.push_back(m); fatigue.push_back(0); hp.push_back(0);
-    state.push_back(S_FORMED); side.push_back(s); kind.push_back(k); armor.push_back(a); cd.push_back(0); flags.push_back(0);
+    state.push_back(S_FORMED); side.push_back(s); kind.push_back(k); armor.push_back(a); cd.push_back(0); flags.push_back(0); routNear.push_back(0); push.push_back(0);
     unit.push_back(u); slot.push_back(sl); target.push_back(-1);
     return (int)x.size() - 1;
   }
@@ -98,12 +102,13 @@ struct Event {   // 给界面看的事件（史书体日志）
 struct World {
   Params P;
   Rng rng;
+  Terrain terrain;
   Soldiers s;
   std::vector<Unit> units;
   Side sides[2];
   int tick = 0;
   std::vector<Event> events;
-  explicit World(uint32_t seed = 1) : rng(seed) {}
+  explicit World(uint32_t seed = 1) : rng(seed) { terrain.init(P.worldW, P.worldH); }
   float time() const { return tick * P.dt; }
   int addUnit(const Unit& u) { units.push_back(u); units.back().id = (int)units.size() - 1; return units.back().id; }
 };

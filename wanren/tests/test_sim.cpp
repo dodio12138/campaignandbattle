@@ -111,7 +111,7 @@ int main() {
     Sim sim(4, 1);
     UnitSpec inf{"刀盾", K_SWORD, 600}; inf.files = 60; inf.armorPct[0] = 60; inf.armorPct[1] = 30; inf.armorPct[2] = 10;
     UnitSpec cav{"突骑", K_CAV, 300}; cav.files = 30; cav.elite = true;
-    int a = addUnit(sim, 0, inf, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, cav, 500, 700, 0, -1, 0); sim.finalize();
+    int a = addUnit(sim, 0, inf, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, cav, 700, 500, -1, 0, 0); sim.finalize();   // 从侧翼冲（正面是盾墙，马不肯前）
     sim.issue(b, {O_CHARGE, 500, 500, a}, true);
     int maxMelee = 0, meleeRun = 0, cycles = 0; uint8_t last = CP_NONE; int disengages = 0;
     for (int t = 0; t < 1800; t++) {
@@ -122,7 +122,7 @@ int main() {
     }
     const Unit& I = sim.w.units[a]; const Unit& C = sim.w.units[b];
     printf("   突骑对刀盾 3 分钟：冲击 %d 轮，脱离 %d 次，最长连续接战 %.1f s；刀盾 亡伤 %d/%d 溃 %d；骑 亡伤 %d/%d 溃 %d 疲 %.0f\n", cycles, disengages, maxMelee * 0.1, I.dead, I.wounded, I.routed, C.dead, C.wounded, C.routed, sim.unitFatigue[b]);
-    CHECK(cycles >= 2 && disengages >= 2, "突骑至少冲击两轮并脱离");
+    CHECK(cycles >= 2 && disengages >= 2, "突骑（侧翼）至少冲击两轮并脱离");
     CHECK(maxMelee * 0.1 <= sim.w.P.cavMeleeSeconds + 1.5, "每轮接战不超过设定秒数");
     CHECK(C.dead + C.wounded < 100, "骑兵没有耗死在人堆里");
   }
@@ -163,6 +163,89 @@ int main() {
     printf("   弩 600 张 90 s：横列射方阵 伤 %d，方阵射方阵 伤 %d；横列射数阵 %d，射疏阵 %d\n", line, square, dense, loose);
     CHECK(line > square * 1.5, "横列全员可射，远多于深方阵");
     CHECK(dense > loose * 1.5, "数阵比疏阵吃箭多");
+  }
+  // 10. 推挤：十排纵深的戟阵对三排横列，60 s 后横列被推退、阵线后弯
+  {
+    Sim sim(9, 1);
+    UnitSpec deep{"深阵", K_HALBERD, 1000}; deep.files = 50;
+    UnitSpec thin{"横列", K_HALBERD, 150}; thin.files = 50;
+    int a = addUnit(sim, 0, deep, 500, 480, 0, 1, 0); int b = addUnit(sim, 1, thin, 500, 500, 0, -1, 0); sim.finalize();
+    float y0 = sim.w.units[b].cy;
+    sim.issue(a, {O_MOVE, 500, 520}, true);
+    for (int t = 0; t < 600; t++) sim.step();
+    const Unit& T = sim.w.units[b]; const Unit& D = sim.w.units[a];
+    printf("   推挤 60 s：横列中心后退 %.1f m，深阵中心前进 %.1f m；横列 亡伤 %d 溃 %d，深阵 亡伤 %d\n", T.cy - y0, D.cy - 480.f, T.dead + T.wounded, T.routed, D.dead + D.wounded);
+    CHECK(T.cy - y0 > 2.f, "横列被推退");
+    CHECK(D.routed < 300, "深阵前排折损不致全曲崩溃（后队压得住）");
+  }
+  // 11. 溃兵传染有方向性：溃兵穿过本阵的曲掉士气，远处的曲不掉
+  {
+    Sim sim(10, 1);
+    UnitSpec sp{"曲", K_HALBERD, 400}; sp.files = 40;
+    int near_ = addUnit(sim, 0, sp, 500, 450, 0, 1, 0); int far_ = addUnit(sim, 0, sp, 800, 450, 0, 1, 0);
+    UnitSpec vict{"前曲", K_HALBERD, 400}; vict.files = 40;
+    int v = addUnit(sim, 0, vict, 500, 520, 0, 1, 1);
+    UnitSpec en{"敌", K_HALBERD, 200}; en.files = 20; addUnit(sim, 1, en, 500, 650, 0, -1, 0);   // 敌在北 130 m，溃兵不会收拢
+    sim.finalize();
+    for (int id : sim.w.units[v].members) { sim.w.s.state[id] = S_ROUT; sim.w.s.morale[id] = -50; }   // 前曲全溃（士气 -50，几分钟内不会收拢），往南跑穿过 near_
+    for (int id : sim.w.units[near_].members) sim.w.s.morale[id] = 50;   // 被穿过的曲本已动摇（士气 50）
+    for (int id : sim.w.units[far_].members) sim.w.s.morale[id] = 50;
+    float mNear = 100, mFar = 100;
+    for (int t = 0; t < 450; t++) { sim.step(); mNear = std::min(mNear, sim.w.units[near_].moraleAvg); mFar = std::min(mFar, sim.w.units[far_].moraleAvg); }
+    printf("   溃兵穿阵 45 s：被穿过的曲（本已动摇）溃 %d 人、最低士气 %.0f；300 m 外同样动摇的曲溃 %d 人\n", sim.w.units[near_].routed, mNear, sim.w.units[far_].routed);
+    CHECK(mNear < mFar - 5.f, "溃兵穿过的曲士气明显更低（被压向溃走线，但不直接溃）");
+    CHECK(sim.w.units[far_].routed == 0 && mFar > 45.f, "远处的曲不受影响");
+  }
+  // 12. 追击与俘降：溃兵被骑兵追上多数就擒
+  {
+    Sim sim(12, 1);
+    UnitSpec inf{"步", K_SWORD, 400}; inf.files = 40;
+    UnitSpec cav{"骑", K_CAV, 200}; cav.files = 20;
+    int a = addUnit(sim, 0, inf, 500, 500, 0, 1, 0); int b = addUnit(sim, 1, cav, 500, 600, 0, -1, 0); sim.finalize();
+    for (int id : sim.w.units[a].members) { sim.w.s.state[id] = S_ROUT; sim.w.s.morale[id] = -30; }
+    sim.w.units[a].broken = true;
+    sim.issue(b, {O_CHARGE, 500, 500, a}, true);
+    for (int t = 0; t < 900; t++) sim.step();
+    const Unit& I = sim.w.units[a];
+    printf("   骑兵追溃兵 90 s：亡 %d 伤 %d 降 %d 尚在逃 %d\n", I.dead, I.wounded, I.captured, I.routed);
+    CHECK(I.captured > 20 && I.captured > I.dead, "溃兵被追上多数就擒");
+  }
+  // 13. 让路：方阵穿过本方弓手横列时横列开口，两边都不乱
+  {
+    Sim sim(13, 1);
+    UnitSpec blk{"方阵", K_HALBERD, 600}; blk.files = 30;
+    UnitSpec bow{"弓手", K_BOW, 300}; bow.formation = F_LINE; bow.files = 100;
+    int a = addUnit(sim, 0, blk, 500, 460, 0, 1, 0); int b = addUnit(sim, 0, bow, 500, 520, 0, 1, 1); sim.finalize();
+    sim.issue(a, {O_MOVE, 500, 620}, true);
+    float minA = 1.f, minB = 1.f;
+    for (int t = 0; t < 1500; t++) { sim.step(); if (t > 50) { minA = std::min(minA, sim.w.units[a].cohesion); minB = std::min(minB, sim.w.units[b].cohesion); } }
+    printf("   方阵穿过弓手横列：方阵最低凝聚 %.2f，弓手最低凝聚 %.2f，方阵到达 y=%.0f\n", minA, minB, sim.w.units[a].cy);
+    CHECK(minA > 0.6f, "穿过时方阵不散");
+    CHECK(fabsf(sim.w.units[a].cy - 620) < 3.f, "方阵穿过后到达");
+  }
+  // 14. 地形：林中行进慢；河挡路、绕渡口过；居高临下近战占优
+  {
+    Sim sim(14, 1);
+    sim.w.terrain.patch(T_FOREST, 600, 500, 80);   // 覆盖路程中段 160 m
+    sim.w.terrain.river({{900, 0}, {900, 1000}}, 30, {0.7f}, 40);   // 渡口在 y=700
+    UnitSpec sp{"曲", K_HALBERD, 200}; sp.files = 20;
+    int a = addUnit(sim, 0, sp, 500, 500, 1, 0, 0); int b = addUnit(sim, 0, sp, 500, 620, 1, 0, 0); sim.finalize();
+    sim.issue(a, {O_MOVE, 700, 500}, true); sim.issue(b, {O_MOVE, 700, 620}, true);   // a 穿林，b 走旷野
+    int ta = -1, tb = -1;
+    for (int t = 0; t < 3000; t++) { sim.step(); if (ta < 0 && sim.w.units[a].stance == ST_HOLD && t > 5) ta = t; if (tb < 0 && sim.w.units[b].stance == ST_HOLD && t > 5) tb = t; if (ta > 0 && tb > 0) break; }
+    printf("   林中 200 m 用时 %.0f s，旷野 %.0f s\n", ta * 0.1, tb * 0.1);
+    CHECK(ta > tb * 1.3, "林中行进明显更慢");
+    sim.issue(b, {O_MOVE, 1100, 500}, true);   // 要过河：直线被挡，应绕到 y=700 渡口
+    bool wet = false; float maxY = 0;
+    for (int t = 0; t < 9000; t++) { sim.step(); const Unit& B = sim.w.units[b]; maxY = std::max(maxY, B.cy); for (int id : B.members) if (sim.w.terrain.typeAt(sim.w.s.x[id], sim.w.s.y[id]) == T_WATER) wet = true; if (B.stance == ST_HOLD && t > 5) break; }
+    printf("   过河：最北到 y=%.0f，到达 x=%.0f，是否下水 %s\n", maxY, sim.w.units[b].cx, wet ? "是" : "否");
+    CHECK(!wet && sim.w.units[b].cx > 1050, "绕渡口过河，无人下水");
+    // 居高临下
+    auto duel = [](bool hill) { Sim sim(15, 1); if (hill) sim.w.terrain.hill(500, 520, 80, 10); UnitSpec x{"甲", K_HALBERD, 300}; x.files = 30; UnitSpec y{"乙", K_HALBERD, 300}; y.files = 30;
+      int a = addUnit(sim, 0, x, 500, 480, 0, 1, 0); int b = addUnit(sim, 1, y, 500, 512, 0, -1, 0); sim.finalize(); sim.issue(a, {O_MOVE, 500, 500}, true); for (int t = 0; t < 900; t++) sim.step(); return std::make_pair(sim.w.units[a].dead + sim.w.units[a].wounded, sim.w.units[b].dead + sim.w.units[b].wounded); };
+    auto flat = duel(false), up = duel(true);
+    printf("   平地对攻 90 s：甲伤 %d 乙伤 %d；乙居高：甲伤 %d 乙伤 %d\n", flat.first, flat.second, up.first, up.second);
+    CHECK((float)up.first / std::max(1, up.second) > (float)flat.first / std::max(1, flat.second), "仰攻一方吃亏");
   }
   printf(fails ? "\n%d 项失败\n" : "\n全部通过\n", fails);
   return fails ? 1 : 0;

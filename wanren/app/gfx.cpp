@@ -118,3 +118,19 @@ float Gfx::text(const std::string& s, float x, float y, uint32_t rgba, int pt) {
 }
 float Gfx::textWidth(const std::string& s, int pt) { return s.empty() ? 0.f : (float)textTex(s, pt).w; }
 float Gfx::lineH(int pt) { return textLineHeight(pt ? 1.6f : 1.f); }
+
+GLuint Gfx::makeTexture(int w, int h, const uint8_t* rgba) {
+  GLuint id; glGenTextures(1, &id); glBindTexture(GL_TEXTURE_2D, id);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+  return id;
+}
+void Gfx::texQuad(float x, float y, float w, float h, GLuint tex, float u0, float v0, float u1, float v1) {
+  flush();
+  pushQuad(x, y, w, h, u0, v0, u1, v1, RGBA(255, 255, 255));
+  glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, tex);
+  glBindVertexArray(vao_); glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+  glBufferData(GL_ARRAY_BUFFER, batch_.size() * sizeof(float), batch_.data(), GL_STREAM_DRAW);
+  glUniform1i(uMode_, 2); glDrawArrays(GL_TRIANGLES, 0, 6); glBindVertexArray(0); batch_.clear();
+}

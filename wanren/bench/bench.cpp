@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
   printf("%d tick 用时 %.0f ms，平均 %.2f ms/tick（最慢 %.2f），每人每 tick %.0f ns\n", t, ms, ms / t, maxMs, ms * 1e6 / t / n);
   printf("分段耗时 ms/tick：令+军团 %.2f 网格 %.2f 士卒并行 %.2f 近战 %.2f 齐射 %.2f 士气统计 %.2f\n", sim.phaseMs[0]/t, sim.phaseMs[1]/t, sim.phaseMs[2]/t, sim.phaseMs[3]/t, sim.phaseMs[4]/t, sim.phaseMs[5]/t);
   printf("战场时间 %.1f 分钟；结局：%s\n", sim.w.time() / 60.f, winner < 0 ? "未决" : (sim.w.sides[winner].name + "胜").c_str());
-  for (int sd = 0; sd < 2; sd++) { auto& S = sim.w.sides[sd]; printf("  %s：总 %d 在阵 %d 阵亡 %d 伤 %d 溃 %d%s%s\n", S.name.c_str(), S.total, S.alive, S.dead, S.wounded, S.routed, S.generalDown ? " 主将殁" : "", S.fled ? " 主将走" : ""); }
+  for (int sd = 0; sd < 2; sd++) { auto& S = sim.w.sides[sd]; printf("  %s：总 %d 在阵 %d 阵亡 %d 伤 %d 降 %d 溃 %d%s%s\n", S.name.c_str(), S.total, S.alive, S.dead, S.wounded, S.captured, S.routed, S.generalDown ? " 主将殁" : "", S.fled ? " 主将走" : ""); }
   for (auto& u : sim.w.units) printf("    %s %s 存 %d 亡 %d 伤 %d 溃 %d 凝聚 %.2f 士气 %.0f%s\n", sim.w.sides[u.side].name.c_str(), u.name.c_str(), u.alive, u.dead, u.wounded, u.routed, u.cohesion, u.moraleAvg, u.broken ? " 溃" : "");
   int shown = 0; for (auto& e : sim.w.events) { if (shown++ > 40) break; printf("  [%5.1fs] %s\n", e.tick * sim.w.P.dt, e.text.c_str()); }
   return 0;

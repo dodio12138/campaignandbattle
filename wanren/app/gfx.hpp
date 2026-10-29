@@ -23,6 +23,8 @@ class Gfx {
   void flush();
   // 文本（UTF-8），返回宽度
   float text(const std::string& s, float x, float y, uint32_t rgba, int pt = 0);
+  GLuint makeTexture(int w, int h, const uint8_t* rgba);   // 建 RGBA 贴图（地形）
+  void texQuad(float x, float y, float w, float h, GLuint tex, float u0, float v0, float u1, float v1);
   float textWidth(const std::string& s, int pt = 0);
   float lineH(int pt = 0);
   float dpi = 1.f;

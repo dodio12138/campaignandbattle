@@ -25,6 +25,20 @@ void aiStep(Sim& sim, int side) {
     bool engaged = w.tick - u.lastEngagedTick < 30;
     if (kindIsMissile(u.kind) && !kindIsCav(u.kind)) {
       float range = u.kind == K_HXBOW ? P.hxbowRange : u.kind == K_XBOW ? P.xbowRange : P.bowRange;
+      // 护弩：敌骑逼近（120 m 内且正向我来）→ 最近的本方步兵曲扑上拦截，弩手退到它身后
+      int cavThreat = -1; float cavD = 120.f;
+      for (auto& v : w.units) { if (v.side == side || !kindIsCav(v.kind) || v.alive < 10) continue; float dx = u.cx - v.cx, dy = u.cy - v.cy, dd = hypotf(dx, dy); if (dd < cavD && (dx * v.fx + dy * v.fy) / std::max(dd, 1.f) > 0.3f) { cavD = dd; cavThreat = v.id; } }
+      if (cavThreat >= 0) {
+        const Unit& C = w.units[cavThreat];
+        int guard = -1; float gd = 150.f;
+        for (auto& g : w.units) { if (g.side != side || kindIsMissile(g.kind) || kindIsCav(g.kind) || g.alive < 50 || g.stance == ST_PRONE || w.tick - g.lastEngagedTick < 30) continue; float dd = hypotf(g.cx - u.cx, g.cy - u.cy); if (dd < gd) { gd = dd; guard = g.id; } }
+        if (guard >= 0) {
+          const Unit& G = w.units[guard];
+          if (G.stance != ST_CHARGE) sim.issue(guard, {O_CHARGE, C.cx, C.cy});
+          if (!engaged && d > 15.f) { float bx = G.cx - adx * (G.hy + u.hy + 8.f), by = G.cy - ady * (G.hy + u.hy + 8.f); if (hypotf(bx - u.cx, by - u.cy) > 10.f) sim.issue(u.id, {O_MOVE, bx, by, 1}); }   // 平移退到步兵身后
+          continue;
+        }
+      }
       if (d < 30.f && !engaged) { sim.issue(u.id, {O_RETREAT, u.cx - adx * 80.f, u.cy - ady * 80.f}); }
       else if (d > range * 0.9f && u.stance == ST_HOLD) { sim.issue(u.id, {O_MOVE, u.cx + adx * (d - range * 0.8f), u.cy + ady * (d - range * 0.8f)}); if (u.formation != F_LINE) sim.issue(u.id, {O_FORMATION, 0, 0, F_LINE}); }
       continue;
@@ -62,7 +76,12 @@ void aiStep(Sim& sim, int side) {
       }
       continue;
     }
-    // 步兵主力
+    // 步兵主力：敌骑在侧而敌步兵未近 → 改数阵（密集，骑兵勒马门槛低）；敌步兵逼近或无骑威胁 → 回方阵
+    {
+      float nearFoot = 1e9f; for (auto& v : w.units) if (v.side != side && v.alive > 10 && !kindIsCav(v.kind) && v.stance != ST_PRONE) nearFoot = std::min(nearFoot, hypotf(v.cx - u.cx, v.cy - u.cy));
+      if (u.cavThreat && nearFoot > 120.f && u.formation != F_DENSE && !engaged) { sim.issue(u.id, {O_FORMATION, 0, 0, F_DENSE}); continue; }
+      if (u.formation == F_DENSE && (!u.cavThreat || nearFoot < 80.f) && !engaged) { sim.issue(u.id, {O_FORMATION, 0, 0, F_SQUARE}); continue; }
+    }
     if (d < 45.f && !engaged) { if (u.stance != ST_CHARGE) sim.issue(u.id, {O_CHARGE, E.cx, E.cy}); }
     else if (!engaged && d < 400.f && u.stance == ST_HOLD) sim.issue(u.id, {O_MOVE, E.cx, E.cy});
     else if (!engaged && u.stance == ST_HOLD) sim.issue(u.id, {O_MOVE, u.cx + adx * 150.f, u.cy + ady * 150.f});

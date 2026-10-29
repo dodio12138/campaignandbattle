@@ -11,7 +11,8 @@ struct UnitSpec {
   bool general = false;             // 主将随此曲
   bool prone = false;
 };
-struct ScenarioDef { std::string id, title, note; std::vector<UnitSpec> armies[2]; std::string sideName[2]; bool aiSide[2] = {false, true}; };
+struct TerrainFeature { enum Kind { HILL, RIDGE, FOREST, MARSH, RIVER } kind; float x0 = 0, y0 = 0, x1 = 0, y1 = 0, r = 0, h = 0; std::vector<float> fords; };   // 坐标相对战场中心（x 右，y 向 0 方的前方）
+struct ScenarioDef { std::string id, title, note; std::vector<UnitSpec> armies[2]; std::string sideName[2]; bool aiSide[2] = {false, true}; std::vector<TerrainFeature> terrain; };
 
 const std::vector<ScenarioDef>& scenarios();
 // 把剧本装进 sim（两军相向，相距 dist 米）

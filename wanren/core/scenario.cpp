@@ -42,6 +42,10 @@ static ScenarioDef jieqiao() {
   const char* bn[] = {"步兵前左", "步兵前右", "步兵中左", "步兵中右", "步兵后左", "步兵后右"};
   for (int i = 0; i < 6; i++) { UnitSpec u{bn[i], (i % 3 == 2) ? K_SWORD : K_HALBERD, 1500, false, false, false, {55, 35, 10}, F_SQUARE, 60}; u.ox = (i % 2 ? 70.f : -70.f); u.oy = -(i / 2) * 60.f; if (i == 3) u.general = true; B.push_back(u); }
   B.push_back({"弓弩", K_XBOW, 800, false, false, false, {50, 40, 10}, F_LINE, 80, 0, -200});
+  // 磐河自北向南在战场东侧流过，界桥（渡口）在两军之间偏东；西侧略有起伏
+  s.terrain.push_back({TerrainFeature::RIVER, 420, -900, 380, 900, 28, 0, {0.5f}});
+  s.terrain.push_back({TerrainFeature::HILL, -350, 150, 0, 0, 220, 8});
+  s.terrain.push_back({TerrainFeature::FOREST, -520, -200, 0, 0, 120, 0});
   return s;
 }
 
@@ -59,6 +63,9 @@ static ScenarioDef plain() {
     if (sd == 1) A.push_back({"精骑", K_CAV_ARMORED, 300, true, false, true, {0, 0, 100}, F_WEDGE, 15, 0, -120});
     else A.push_back({"陷阵", K_HALBERD, 700, true, false, false, {0, 0, 100}, F_DENSE, 35, 0, -80});
   }
+  s.terrain.push_back({TerrainFeature::HILL, 0, 0, 0, 0, 180, 12});        // 两军之间一座土山
+  s.terrain.push_back({TerrainFeature::FOREST, -420, 60, 0, 0, 140, 0});    // 西侧林
+  s.terrain.push_back({TerrainFeature::MARSH, 450, -40, 0, 0, 90, 0});      // 东侧沼
   return s;
 }
 
@@ -72,6 +79,16 @@ void loadScenario(Sim& sim, const ScenarioDef& sc, float dist, float scale) {
   size_t total = 0; for (int sd = 0; sd < 2; sd++) for (auto& u : sc.armies[sd]) total += (size_t)(u.men * scale);
   w.s.reserve(total);
   float cx = w.P.worldW * 0.5f, cy = w.P.worldH * 0.5f;
+  w.terrain.init(w.P.worldW, w.P.worldH);
+  for (const TerrainFeature& f : sc.terrain) {
+    switch (f.kind) {
+      case TerrainFeature::HILL: w.terrain.hill(cx + f.x0, cy + f.y0, f.r, f.h); break;
+      case TerrainFeature::RIDGE: w.terrain.ridge(cx + f.x0, cy + f.y0, cx + f.x1, cy + f.y1, f.r, f.h); break;
+      case TerrainFeature::FOREST: w.terrain.patch(T_FOREST, cx + f.x0, cy + f.y0, f.r); break;
+      case TerrainFeature::MARSH: w.terrain.patch(T_MARSH, cx + f.x0, cy + f.y0, f.r); break;
+      case TerrainFeature::RIVER: w.terrain.river({{cx + f.x0, cy + f.y0}, {cx + f.x1, cy + f.y1}}, f.r, f.fords, 40.f); break;
+    }
+  }
   for (int sd = 0; sd < 2; sd++) {
     w.sides[sd].name = sc.sideName[sd]; w.sides[sd].ai = sc.aiSide[sd];
     float fy = sd == 0 ? 1.f : -1.f;           // 0 方朝北（+y），1 方朝南
@@ -84,6 +101,7 @@ void loadScenario(Sim& sim, const ScenarioDef& sc, float dist, float scale) {
       addUnit(sim, sd, sp, ux, uy, 0.f, fy, part + (int)i / 2);
     }
   }
+  for (auto& u : w.units) if (w.sides[u.side].ai && kindIsMissile(u.kind) && !kindIsCav(u.kind)) u.fireDiscipline = true;
   sim.finalize();
   sim.log(sc.title + "：" + sc.note);
 }

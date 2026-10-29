@@ -58,19 +58,19 @@ struct Params {
   float horseArmorArrow = 0.70f;  // 具装受箭减伤
 
   // —— 疲劳 ——
-  float fatigueRun = 0.3f, fatigueFight = 0.08f, fatigueRest = 0.12f, fatigueMax = 100.f;
+  float fatigueRun = 0.3f, fatigueFight = 0.12f, fatigueRest = 0.12f, fatigueMax = 100.f;
 
   // —— 士气 ——
   float moraleInit = 70.f, moraleInitElite = 85.f;
   float moraleThreshold = 25.f, moraleThresholdElite = 10.f;
-  float mDeathNear = 5.f, mDeathSquad = 10.f;     // 身边 / 同伍什阵亡
+  float mDeathNear = 4.f, mDeathSquad = 10.f;     // 同格（4×4 m）/ 同伍什阵亡
   float mRoutNear = 3.f, mRoutSquad = 8.f;        // 身边 / 同伍什逃走
   float mFlank = 1.f, mCavNear = 0.05f, mCavNearFloor = 45.f;   // 侧后敌骑：缓慢压低士气，但不低于 floor             // 每 tick
   float mOfficerDown = 20.f, mFlagDown = 20.f;
   float mSiblingBroken = 15.f, mGeneralDown = 35.f;
-  float mRecover = 0.3f, mRecoverCap = 80.f, mCharge = 10.f;
-  float mFatigueCap = 0.4f;                        // 上限 = 100 − 疲劳×0.4
-  float rallyDist = 150.f, rallyMorale = 40.f;
+  float mRecover = 0.015f, mRecoverCap = 80.f, mCharge = 10.f;   // 每 tick；约 9 点/分钟：动摇要以分钟计才能平复
+  float mFatigueCap = 0.6f;                        // 上限 = 100 − 疲劳×0.6
+  float rallyDist = 250.f, rallyMorale = 40.f;
   float unitBrokenFrac = 0.5f;                     // 曲内逃走比例超过即「溃」
   float generalFleeFrac = 0.5f;                    // 全军溃曲比例超过主将走
 
@@ -93,7 +93,7 @@ struct Params {
   float cavDisengageDist = 80.f;   // 脱离后退到多远整队
   float cavReformCohesion = 0.7f;  // 整队到此凝聚再冲
   float cavReformMaxSeconds = 20.f;
-  float cavPursueSeconds = 30.f;   // 敌溃后追击秒数
+  float cavPursueSeconds = 90.f;   // 敌溃后追击秒数
   float haStandoff = 50.f;         // 骑射横掠时与敌阵的距离
   float haSwingOut = 90.f;         // 掠过后甩开的距离
   float haMovingFire = 0.7f;       // 移动射击命中倍率
@@ -113,6 +113,27 @@ struct Params {
     {1.00f, 0.8f, 1.0f, 0.70f, 1.0f, false, true },   // 横列：全员可射，正面最宽，薄
     {1.15f, 2.0f, 1.2f, 0.95f, 1.0f, false, false},   // 纵队：行军快，不能战
   };
+
+  // —— 推挤、阵线弯折、久战 ——
+  float pushSpeed = 0.35f;         // 人多一方把人少一方推开的速度（米/秒）
+  float pushRatio = 1.5f;          // 3 m 内己方人数超过敌方此倍才算占优
+  float centerPush = 0.6f;         // 接战中曲中心随推挤净方向移动的速度系数（×pushSpeed）
+  float fightMorale = 0.05f;       // 接战中每 tick 士气损耗（久战生畏）
+  // —— 溃兵传染方向性 ——
+  float routNearPerTick = 1.5f;    // 每个从身边（4 m 内）跑过的本方溃兵每 tick 扣（不打未接敌折扣：人是真从阵里穿过去的）
+  int routNearCap = 5;
+  float officerSuppress = 0.5f;    // 军候在侧且旗立，传染减半
+  // —— 追击与俘降 ——
+  float captureProb = 0.6f;        // 溃兵被近战追上倒地时成为俘虏的比例（其余阵亡 / 伤）
+  // —— 让路 ——
+  float gapMargin = 3.f, gapSeconds = 3.f;
+
+  // —— 地形 ——
+  float slopeSpeed = 2.0f;         // 上坡：速度 × (1 − 坡度×此)，下限 0.4
+  float uphillHit = 0.85f, downhillHit = 1.1f, hillStep = 1.5f;   // 攻击方比目标低 / 高 1.5 m 以上
+  float forestCover = 0.5f;        // 林中目标受箭命中倍率
+  float forestImpact = 0.5f;       // 林中骑兵冲击倍率
+  float heightRange = 0.012f;      // 每米高差改变射程的比例（高处射远）
 
   bool load(const std::string& path);   // 读 key = value，缺省保留
   bool set(const std::string& key, float v);
